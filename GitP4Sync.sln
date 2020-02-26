@@ -10,6 +10,11 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution 
 		README.md = README.md
 	EndProjectSection
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Images", "Images", "{5CB3B734-EF91-4498-BE09-CFEF48F10525}"
+	ProjectSection(SolutionItems) = preProject
+		Images\GitP4Sync.png = Images\GitP4Sync.png
+	EndProjectSection
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -23,6 +28,9 @@ Global
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{5CB3B734-EF91-4498-BE09-CFEF48F10525} = {8312C68B-BCD7-41B5-B864-018E6DB74725}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {F68543A6-10A2-4301-94BA-13A7EC266EF3}

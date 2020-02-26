@@ -30,3 +30,5 @@ Any pull request to master will be picked and processed by the Service, which wi
 
 In a future release, the service will automatically check-in to perforce, eliminating the need to deal with perforce.
 A detailed step by step instructions in being developed and will be published to this repo.
+
+![GitP4Sync workflow](/Images/GitP4Sync.png)
