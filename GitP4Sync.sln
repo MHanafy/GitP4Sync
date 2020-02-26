@@ -13,6 +13,7 @@ EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Images", "Images", "{5CB3B734-EF91-4498-BE09-CFEF48F10525}"
 	ProjectSection(SolutionItems) = preProject
 		Images\GitP4Sync.png = Images\GitP4Sync.png
+		Images\Logo.png = Images\Logo.png
 	EndProjectSection
 EndProject
 Global
