@@ -1,0 +1,16 @@
+﻿{
+	"WorkDir": "C:\\Temp\\clone2\\",
+	"P4Client": "GitSubmit",
+	"P4MaxChanges": "10",
+	"Scripts": "Git.ps1,P4.ps1",
+	"GithubInstallationId": "0",
+	"SchedulerSettings": {
+		"InitialSleepTime": "500",
+		"MaxSleepTime": "300000",
+		"Concurrency": "1"
+	},
+	"GithubSettings": {
+		"KeyPath": "key.pem",
+		"ApplicationId": "0"
+	}
+}	
