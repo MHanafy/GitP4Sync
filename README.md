@@ -12,13 +12,14 @@ The benefits are:
 
 This becomes possible because, instead of trying to make a 2-way sync and worrying about resolving conflicts; GitP4Sync utilizes a one way sync from Perforce to Git, while using Github pull requests as a proxy to capture Git changes and submit them to Perforce eliminating conflict resolution and enabling a smooth syncing mechanism that doesn't require manual intervention.
 
-## prerequisites
+## Prerequisites
 - A git repository migrated from Perforce using https://git-scm.com/docs/git-p4, and pushed to Github.com
 - A worker machine to host the service with internet access, and network access to the Perforce server.
 - A service account on the worker machine which has Git and Git-P4 configured, perforce client and a workspace, and adequate storage for handling the repository size
 - A private Github app with permission to `Checks`, `Contents`, and `Pull Requests`, installed on subject repository; create one here https://github.com/settings/apps
 - All Github users should have mapped Perforce users.
 
+## How it works
 After starting the service, it'll continuously pull the changes from Perforce to the Github repository.
 Git developers will deal with the Github repository as any other repository, When the code is ready to submit, they should create a pull request.
 Any pull request to master will be picked and processed by the Service, which will:
