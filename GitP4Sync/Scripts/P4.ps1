@@ -11,7 +11,8 @@
             switch($_.State){
                 'A'{ 
                         #try fetching the file in case a file with the same name was added by another P4 user
-                        $log = p4 sync "$localFileName" 2>&1
+                        $log = p4 sync -f "$localFileName" 2>&1
+                        if($LastExitCode -ne 0) {throw "P4: failed to sync '$fileName'`r`n$log"}
                         if(-not ($log -match "no such file\(s\)")) {throw "P4: Same file name was added by another user '$localFileName'`r`n$log"}
                         $log = Copy-Item $fileName "$localFileName"
                         if($LastExitCode -ne 0) {throw "P4: failed to copy '$fileName'`r`n$log"}
@@ -19,13 +20,15 @@
                         if($LastExitCode -ne 0) {throw "P4: failed to add '$fileName'`r`n$log"}
                     } 
                 'D'{ 
-                        P4Sync "$localFileName" 
+                        $log = p4 sync -f "$localFileName" 
+                        if($LastExitCode -ne 0) {throw "P4: failed to sync '$fileName'`r`n$log"}
                         $log = P4 delete -c $changelist "$localFileName" 2>&1
                         if($LastExitCode -ne 0) {throw "P4: failed to delete '$fileName'`r`n$log"}
                     }
                 'M'{ 
-                        P4Sync "$localFileName"
-                        $output = p4 edit  -c $changelist "$localFileName" 2>&1
+                        $log = p4 sync -f "$localFileName"
+                        if($LastExitCode -ne 0) {throw "P4: failed to sync '$fileName'`r`n$log"}
+                        $output = p4 edit -c $changelist "$localFileName" 2>&1
                         if($LastExitCode -ne 0 -or -not ($output -match "opened for edit")) 
                         {
                             throw "P4: failed to checkout file '$fileName'`r`n$output"
@@ -55,7 +58,7 @@ function P4GetLocalFileName($depotFileName){
     ([regex]::Matches($log, $exp))[0].Groups[1].Value
 }
 
-function P4Submit($type, $id, $user, $desc){
+function P4Submit($type, $id, $user, $desc, $shelve = 'y'){
     if($type -ne 'branch' -and $type -ne 'commit'){throw "Git: invalid parameter value for type: '$type' has be be one of ['commit', 'branch']" }
     Write-Host "P4: Starting P4Submit - $type '$id' User '$user' Desc '$desc' P4 client: '$Env:P4Client'"
 
@@ -74,9 +77,16 @@ function P4Submit($type, $id, $user, $desc){
     if($LastExitCode -ne 0) {throw "P4: failed to get submitted changes"}
     $latestChange = ([regex]::Matches($log, 'Change (\d+) on \d{4}\/\d{2}\/\d{2} by'))[0].Groups[1].Value
     if($latestChange = $lastChange){
-        $log = p4 shelve -c $changelist 2>&1
-        if($LastExitCode -ne 0) {throw "P4: failed to shelve P4 changelist '$changelist'`r`n$log"}
-        Write-Host "Shelved changelist '$changelist'"
+        if($shelve -eq 'y'){
+            $log = p4 shelve -c $changelist 2>&1
+            if($LastExitCode -ne 0) {throw "P4: failed to shelve changelist '$changelist'`r`n$log"}
+            Write-Host "Shelved changelist '$changelist'"
+		} else
+        {
+            $log = p4 submit -c $changelist 2>&1
+            if($LastExitCode -ne 0) {throw "P4: failed to submit changelist '$changelist'`r`n$log"}
+            Write-Host "Submitted changelist '$changelist'"
+		}
 	} 
     else{
         throw "A change is detected, aborting submit"

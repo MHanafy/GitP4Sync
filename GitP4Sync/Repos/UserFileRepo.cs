@@ -1,5 +1,6 @@
 ﻿using System.Collections.Generic;
 using System.IO;
+using MHanafy.GithubClient;
 using Newtonsoft.Json;
 
 namespace GitP4Sync.Repos
@@ -18,7 +19,7 @@ namespace GitP4Sync.Repos
 
         public UserFileRepo()
         {
-            _watcher = new FileSystemWatcher(".", FileName) {NotifyFilter = NotifyFilters.LastWrite};
+            _watcher = new FileSystemWatcher(".", _fileName) {NotifyFilter = NotifyFilters.LastWrite};
             _watcher.Changed += _watcher_Changed;
             _watcher.EnableRaisingEvents = true;
             _users = new Dictionary<string, User>();
@@ -31,15 +32,19 @@ namespace GitP4Sync.Repos
             Load();
         }
 
-        private const string FileName = "Users.Json";
+        private readonly string _fileName = PathHelper.GetFullPath("Users.Json");
         private readonly Dictionary<string, User> _users;
 
         public void Load()
         {
-            if (!File.Exists(FileName)) return;
+            if (!File.Exists(_fileName))
+            {
+                Logger.Info($"No users loaded, file '{_fileName}' doesn't exist");
+                return;
+            }
             lock (_users)
             {
-                var users = JsonConvert.DeserializeObject<List<User>>(File.ReadAllText(FileName));
+                var users = JsonConvert.DeserializeObject<List<User>>(File.ReadAllText(_fileName));
                 _users.Clear();
                 foreach (var user in users)
                 {
@@ -47,7 +52,12 @@ namespace GitP4Sync.Repos
                     {
                         _users.Add(user.GithubLogin, user);
                     }
+                    else
+                    {
+                        Logger.Warn($"Invalid or duplicate user '{user.GithubLogin}'");
+                    }
                 }
+                Logger.Info($"Loaded {_users.Count} users");
             }
         }
 
@@ -78,7 +88,7 @@ namespace GitP4Sync.Repos
             {
                 if (!_hasChanges) return;
                 _watcher.EnableRaisingEvents = false;
-                File.WriteAllText(FileName, JsonConvert.SerializeObject(_users.Values));
+                File.WriteAllText(_fileName, JsonConvert.SerializeObject(_users.Values));
                 _watcher.EnableRaisingEvents = true;
                 _hasChanges = false;
             }

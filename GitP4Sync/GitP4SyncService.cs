@@ -136,6 +136,8 @@ namespace GitP4Sync
                         CheckRun.RunConclusion.ActionRequired,
                         new CheckRunOutput {Title = $"{Shelve} '{changeList}'", Summary = shelveSummary});
                     Logger.Info(shelveSummary);
+                    await _client.ClosePullRequest(token, repo, pull.Number);
+                    Logger.Info($"Closed pull request {pull.Number}");
                     didSync = true;
                 }
                 catch (Exception e)
