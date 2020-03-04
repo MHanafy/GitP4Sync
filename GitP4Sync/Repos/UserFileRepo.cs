@@ -12,6 +12,7 @@ namespace GitP4Sync.Repos
             public string GithubLogin { get; set; }
             public string P4Login { get; set; }
             public string Name { get; set; }
+            public bool AutoSubmit { get; set; }
         }
 
         private readonly FileSystemWatcher _watcher;
@@ -19,7 +20,7 @@ namespace GitP4Sync.Repos
 
         public UserFileRepo()
         {
-            _watcher = new FileSystemWatcher(".", _fileName) {NotifyFilter = NotifyFilters.LastWrite};
+            _watcher = new FileSystemWatcher(Path.GetDirectoryName(_fileName), Path.GetFileName(_fileName)) {NotifyFilter = NotifyFilters.LastWrite};
             _watcher.Changed += _watcher_Changed;
             _watcher.EnableRaisingEvents = true;
             _users = new Dictionary<string, User>();
@@ -55,6 +56,11 @@ namespace GitP4Sync.Repos
                     else
                     {
                         Logger.Warn($"Invalid or duplicate user '{user.GithubLogin}'");
+                    }
+
+                    if (user.AutoSubmit)
+                    {
+                        Logger.Warn($"User: {user.GithubLogin} is set to {nameof(User.AutoSubmit)}");
                     }
                 }
                 Logger.Info($"Loaded {_users.Count} users");

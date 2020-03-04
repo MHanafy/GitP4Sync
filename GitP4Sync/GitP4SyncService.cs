@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using GitP4Sync.Repos;
@@ -7,7 +8,7 @@ using MHanafy.GithubClient.Models;
 using MHanafy.GithubClient.Models.Github;
 using MHanafy.Scheduling;
 using Microsoft.Extensions.Options;
-
+using Action = MHanafy.GithubClient.Models.Github.Action;
 
 namespace GitP4Sync
 {
@@ -65,6 +66,7 @@ namespace GitP4Sync
         }
 
         private const string Shelve = "Changes were shelved to";
+        private const string Submit = "Ready to submit, Click submit to continue";
 
         private async Task<(bool hasChanges, bool needsSync)> ProcessPullRequests()
         {
@@ -91,7 +93,7 @@ namespace GitP4Sync
                 {
                     var pullDetails = await _client.GetPullRequest(token, repo, pull.Number);
 
-                    if (pullDetails.Mergeable==null)
+                    if (pullDetails.Mergeable == null)
                     {
                         Logger.Info(
                             $"Null mergable flag Skipping pull '{pull.Number}' - CheckRun status '{checkRun.Status}' conclusion '{checkRun.Conclusion}' ActionTitle '{checkRun.Output.Title}'");
@@ -101,7 +103,8 @@ namespace GitP4Sync
                     if (!pullDetails.Mergeable.Value)
                     {
                         checkRun.Conclusion = CheckRun.RunConclusion.ActionRequired;
-                        var summary = "Pull request can't be merged automatically, Please merge manually and update the branch to proceed";
+                        var summary =
+                            "Pull request can't be merged automatically, Please merge manually and update the branch to proceed";
                         await _client.UpdateCheckRun(token, repo, checkRun.Id, CheckRun.RunStatus.InProgress,
                             CheckRun.RunConclusion.ActionRequired,
                             new CheckRunOutput
@@ -110,7 +113,9 @@ namespace GitP4Sync
                         continue;
                     }
 
-                    var review = (await _client.GetReviews(token, repo, pull.Number)).FirstOrDefault(x=>x.State == Review.ReviewState.Approved);
+                    var review =
+                        (await _client.GetReviews(token, repo, pull.Number)).FirstOrDefault(x =>
+                            x.State == Review.ReviewState.Approved);
                     if (review == null)
                     {
                         checkRun.Conclusion = CheckRun.RunConclusion.ActionRequired;
@@ -123,21 +128,42 @@ namespace GitP4Sync
                         continue;
                     }
 
-                    var users = await GetUsers(token, pull, checkRun, review);
-                    if (users.Owner == null || users.Reviewer == null) continue;
+                    var (owner, reviewer) = await GetUsers(token, pull, checkRun, review);
+                    if (owner == null || reviewer == null) continue;
 
-                    var pullTitle = $"{pull.Title} | Reviewed by {users.Reviewer.P4Login}";
-                    var cmd = $"P4Submit commit {pull.Head.Sha} {users.Owner.P4Login} '{pullTitle}'";
-                    var result =await _script.Execute(cmd);
-                    var changeList = result[0].BaseObject;
-                    checkRun.Conclusion = CheckRun.RunConclusion.ActionRequired;
-                    var shelveSummary = $"Changes were successfully shelved to changelist '{changeList}'";
-                    await _client.UpdateCheckRun(token, repo, checkRun.Id, CheckRun.RunStatus.InProgress,
-                        CheckRun.RunConclusion.ActionRequired,
-                        new CheckRunOutput {Title = $"{Shelve} '{changeList}'", Summary = shelveSummary});
-                    Logger.Info(shelveSummary);
-                    await _client.ClosePullRequest(token, repo, pull.Number);
-                    Logger.Info($"Closed pull request {pull.Number}");
+                    if (owner.AutoSubmit)
+                    {
+                        var action = new Action
+                        {
+                            Label = "Submit to Perforce", Identifier = pull.Head.Sha,
+                            Description =
+                                "Click to submit your changes to Perforce; this pull request will be automatically closed upon submission"
+                        };
+                        await _client.UpdateCheckRun(token, repo, checkRun.Id, CheckRun.RunStatus.InProgress,
+                            CheckRun.RunConclusion.ActionRequired,
+                            new CheckRunOutput
+                            {
+                                Title = $"{Submit}",
+                                Summary = "Changes are ready to be submitted to Perforce, Click submit to continue."
+                            }, DateTime.UtcNow, new List<Action> {action});
+                        Logger.Info($"Pull {pull.Number} is ready to be submitted");
+                    }
+                    else
+                    {
+                        var pullTitle = $"{pull.Title} | Reviewed by {reviewer.P4Login}";
+                        var cmd = $"P4Submit commit {pull.Head.Sha} {owner.P4Login} '{pullTitle}'";
+                        var result = await _script.Execute(cmd);
+                        var changeList = result[0].BaseObject;
+                        checkRun.Conclusion = CheckRun.RunConclusion.ActionRequired;
+                        var shelveSummary = $"Changes were successfully shelved to changelist '{changeList}'";
+                        await _client.UpdateCheckRun(token, repo, checkRun.Id, CheckRun.RunStatus.InProgress,
+                            CheckRun.RunConclusion.ActionRequired,
+                            new CheckRunOutput {Title = $"{Shelve} '{changeList}'", Summary = shelveSummary});
+                        Logger.Info(shelveSummary);
+                        await _client.ClosePullRequest(token, repo, pull.Number);
+                        Logger.Info($"Closed pull request {pull.Number}");
+                    }
+
                     didSync = true;
                 }
                 catch (Exception e)
