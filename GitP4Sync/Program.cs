@@ -1,4 +1,5 @@
 ﻿using System;
+using GitP4Sync.Models;
 using GitP4Sync.Repos;
 using GitP4Sync.Services;
 using MHanafy.GithubClient;

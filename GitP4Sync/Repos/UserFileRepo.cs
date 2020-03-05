@@ -1,5 +1,6 @@
 ﻿using System.Collections.Generic;
 using System.IO;
+using GitP4Sync.Models;
 using MHanafy.GithubClient;
 using Newtonsoft.Json;
 
@@ -7,14 +8,6 @@ namespace GitP4Sync.Repos
 {
     class UserFileRepo
     {
-        public class User
-        {
-            public string GithubLogin { get; set; }
-            public string P4Login { get; set; }
-            public string Name { get; set; }
-            public bool AutoSubmit { get; set; }
-        }
-
         private readonly FileSystemWatcher _watcher;
         private static readonly NLog.Logger Logger = NLog.LogManager.GetCurrentClassLogger();
 

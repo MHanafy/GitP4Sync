@@ -1,5 +1,5 @@
 ﻿
-namespace GitP4Sync
+namespace GitP4Sync.Models
 {
     class Settings
     {

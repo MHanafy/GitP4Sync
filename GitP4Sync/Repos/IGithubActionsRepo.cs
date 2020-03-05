@@ -1,44 +1,8 @@
 ﻿using System.Threading.Tasks;
-using MHanafy.GithubClient.Models.Github;
-using Newtonsoft.Json;
+using GitP4Sync.Models;
 
 namespace GitP4Sync.Repos
 {
-    public class RequestedAction
-    {
-        [JsonProperty("identifier")]
-        public string Id { get; set; }
-    }
-    public interface IGithubAction
-    {
-        string Action { get;  }
-        RequestedAction RequestedAction { get; }
-        CheckRun CheckRun { get;  }
-        Repository Repository { get;  }
-        User Sender { get; }
-        Installation Installation { get;  }
-    }
-
-    public class GithubAction : IGithubAction
-    {
-        [JsonProperty("action")]
-        public string Action { get; set; }
-
-        [JsonProperty("requested_action")]
-        public RequestedAction RequestedAction { get; set; }
-
-        [JsonProperty("check_run")]
-        public CheckRun CheckRun { get; set; }
-
-        [JsonProperty("repository")]
-        public Repository Repository { get; set; }
-
-        [JsonProperty("sender")]
-        public User Sender { get; set; }
-
-        [JsonProperty("installation")]
-        public Installation Installation { get; set; }
-    }
 
     internal interface IGithubActionsRepo<T>
         where T:IGithubAction

@@ -1,6 +1,6 @@
 ﻿using System;
 using System.Threading.Tasks;
-using MHanafy.GithubClient.Models.Github;
+using GitP4Sync.Models;
 using Microsoft.Azure.Storage;
 using Microsoft.Azure.Storage.Queue;
 using Microsoft.Extensions.Options;
@@ -8,43 +8,18 @@ using Newtonsoft.Json;
 
 namespace GitP4Sync.Repos
 {
-    /// <inheritdoc />
-    internal class GithubAzureAction : IGithubAction
-    {
-        public readonly CloudQueueMessage Message;
-
-        public GithubAzureAction(CloudQueueMessage msg, GithubAction action)
-        {
-            Message = msg;
-            Action = action.Action;
-            CheckRun = action.CheckRun;
-            Repository = action.Repository;
-            Sender = action.Sender;
-            Installation = action.Installation;
-            RequestedAction = action.RequestedAction;
-        }
-
-        public string Action { get; }
-        public RequestedAction RequestedAction { get; }
-        public CheckRun CheckRun { get; }
-        public Repository Repository { get; }
-        public User Sender { get; }
-        public Installation Installation { get; }
-    }
-
-
     internal class GithubActionsAzureRepo : IGithubActionsRepo<GithubAzureAction>
     {
         private readonly TimeSpan _coolingTime;
 
-
         private readonly CloudQueue _queue;
+        private readonly CloudQueueClient _client;
         public GithubActionsAzureRepo(IOptions<GithubActionsSettings> options)
         {
             _coolingTime = TimeSpan.FromSeconds(options.Value.CoolingTime);
             var account = CloudStorageAccount.Parse(options.Value.QueueConnectionString);
-            var client = account.CreateCloudQueueClient();
-            _queue = client.GetQueueReference(options.Value.QueueName);
+            _client = account.CreateCloudQueueClient();
+            _queue = _client.GetQueueReference(options.Value.QueueName);
         }
 
         /// <summary>
@@ -53,7 +28,7 @@ namespace GitP4Sync.Repos
         /// <returns></returns>
         public async Task<GithubAzureAction> GetAction()
         {
-            var message = await _queue.GetMessageAsync();
+            var message = await _queue.GetMessageAsync(_coolingTime, _client.DefaultRequestOptions, null);
             if (message == null) return null;
             var action = JsonConvert.DeserializeObject<GithubAction>(message.AsString);
             return new GithubAzureAction(message, action);
@@ -74,7 +49,7 @@ namespace GitP4Sync.Repos
         /// <returns></returns>
         public async Task ReturnAction(GithubAzureAction action)
         {
-            await _queue.UpdateMessageAsync(action.Message, _coolingTime, MessageUpdateFields.Visibility);
+            await _queue.UpdateMessageAsync(action.Message, TimeSpan.Zero , MessageUpdateFields.Visibility);
         }
 
     }

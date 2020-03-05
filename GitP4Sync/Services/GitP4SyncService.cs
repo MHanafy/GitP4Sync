@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using GitP4Sync.Models;
 using GitP4Sync.Repos;
 using MHanafy.GithubClient;
 using MHanafy.GithubClient.Models;
@@ -9,6 +10,7 @@ using MHanafy.GithubClient.Models.Github;
 using MHanafy.Scheduling;
 using Microsoft.Extensions.Options;
 using Action = MHanafy.GithubClient.Models.Github.Action;
+using User = GitP4Sync.Models.User;
 
 namespace GitP4Sync.Services
 {
@@ -61,9 +63,9 @@ namespace GitP4Sync.Services
                 var (hasChanges, needsSync) = await ProcessSubmitActions(token, repo);
                 var (hasChanges2, needsSync2) = await ProcessPullRequests(token, repo);
 
-                if (needsSync && needsSync2)
+                if (needsSync || needsSync2)
                 {
-                    hasChanges |= hasChanges2 || await Sync();
+                    hasChanges |= hasChanges2 | await Sync();
                 }
 
                 _userRepo.Save();
@@ -156,6 +158,7 @@ namespace GitP4Sync.Services
                 {
                     var pullDetails = await _client.GetPullRequest(token, repo, pull.Number);
                     var reviewerLogin = await ValidatePull(token, repo, pullDetails, checkRun);
+                    if (reviewerLogin == null) continue;
                     var (owner, reviewer) = await GetUsers(token, pull, checkRun, reviewerLogin);
                     if (owner == null || reviewer == null) continue;
 
@@ -192,7 +195,7 @@ namespace GitP4Sync.Services
             return (hasChanges, !didSync);
         }
 
-        private async Task SubmitToPerforce(InstallationToken token, string repo, PullRequest pull, CheckRun checkRun,  UserFileRepo.User owner, UserFileRepo.User reviewer, bool submit)
+        private async Task SubmitToPerforce(InstallationToken token, string repo, PullRequest pull, CheckRun checkRun,  User owner, User reviewer, bool submit)
         {
             var pullTitle = $"{pull.Title} | Reviewed by {reviewer.P4Login}";
             var cmd = $"P4Submit commit {pull.Head.Sha} {owner.P4Login} '{pullTitle}' {(submit && _settings.AutoSubmitEnabled?'n':'y')}";
@@ -271,7 +274,7 @@ namespace GitP4Sync.Services
             return review.User.Login;
         }
 
-        private async Task<(UserFileRepo.User Owner, UserFileRepo.User Reviewer)> GetUsers(InstallationToken token, PullRequest pull, CheckRun checkRun, string reviewerLogin)
+        private async Task<(User Owner, User Reviewer)> GetUsers(InstallationToken token, PullRequest pull, CheckRun checkRun, string reviewerLogin)
         {
             var user = await GetUser(token, pull.User.Login);
             var reviewer = await GetUser(token, reviewerLogin);
@@ -327,7 +330,7 @@ namespace GitP4Sync.Services
             return await _client.SubmitCheckRun(token, repo, checkRun);
         }
 
-        private async Task<UserFileRepo.User> GetUser(InstallationToken token, string githubLogin)
+        private async Task<User> GetUser(InstallationToken token, string githubLogin)
         {
             var user = _userRepo.Get(githubLogin);
             if (user != null) return user;
