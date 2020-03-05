@@ -49,9 +49,10 @@ namespace GitP4Sync.Repos
                 _users.Clear();
                 foreach (var user in users)
                 {
-                    if (!string.IsNullOrEmpty(user.GithubLogin) && !_users.ContainsKey(user.GithubLogin))
+                    var login = user.GithubLogin?.ToLowerInvariant();
+                    if (!string.IsNullOrEmpty(login) && !_users.ContainsKey(login))
                     {
-                        _users.Add(user.GithubLogin, user);
+                        _users.Add(login, user);
                     }
                     else
                     {
@@ -69,20 +70,22 @@ namespace GitP4Sync.Repos
 
         public User Get(string githubLogin)
         {
+            var login = githubLogin.ToLowerInvariant();
             lock (_users)
             {
-                return _users.ContainsKey(githubLogin) ? _users[githubLogin] : null;
+                return _users.ContainsKey(login) ? _users[login] : null;
             }
         }
 
         private bool _hasChanges;
         public User Add(string githubLogin, string p4User, string name)
         {
+            var login = githubLogin.ToLowerInvariant();
             lock (_users)
             {
-                if (_users.ContainsKey(githubLogin)) return _users[githubLogin];
+                if (_users.ContainsKey(login)) return _users[login];
                 var user = new User {GithubLogin = githubLogin, P4Login = p4User, Name = name};
-                _users.Add(githubLogin, user);
+                _users.Add(login, user);
                 _hasChanges = true;
                 return user;
             }

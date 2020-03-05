@@ -5,15 +5,15 @@ using System.Threading.Tasks;
 using MHanafy.GithubClient;
 using Microsoft.Extensions.Options;
 
-namespace GitP4Sync
+namespace GitP4Sync.Services
 {
-    class Script
+    internal class ScriptService
     {
         private static readonly NLog.Logger Logger = NLog.LogManager.GetCurrentClassLogger();
         private readonly PowerShell _shell;
         private readonly Settings _settings;
 
-        public Script(IOptions<Settings> settings)
+        public ScriptService(IOptions<Settings> settings)
         {
             _shell = PowerShell.Create();
             _shell.Streams.Error.DataAdded += Error_DataAdded;

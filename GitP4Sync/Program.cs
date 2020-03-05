@@ -1,5 +1,6 @@
 ﻿using System;
 using GitP4Sync.Repos;
+using GitP4Sync.Services;
 using MHanafy.GithubClient;
 using MHanafy.GithubClient.Models;
 using MHanafy.Scheduling;
@@ -13,7 +14,7 @@ namespace GitP4Sync
     {
         private static readonly NLog.Logger Logger = NLog.LogManager.GetCurrentClassLogger();
 
-        static void Main(string[] args)
+        static void Main()
         {
             var rc = HostFactory.Run(x =>
             {
@@ -59,12 +60,14 @@ namespace GitP4Sync
                 .Configure<Settings>(config)
                 .Configure<SchedulerSettings>(config.GetSection("SchedulerSettings"))
                 .Configure<GithubSettings>(config.GetSection("GithubSettings"))
+                .Configure<GithubActionsSettings>(config.GetSection("GithubActionsSettings"))
                 .AddScoped<IJwtTokenFactory, GithubJwtTokenFactory>()
                 .AddScoped<GithubHttpClient>()
                 .AddScoped<UserFileRepo>()
                 .AddScoped<IScheduler, Scheduler>()
-                .AddScoped<Script>()
+                .AddScoped<ScriptService>()
                 .AddScoped<GitP4SyncService>()
+                .AddScoped<IGithubActionsRepo<GithubAzureAction>, GithubActionsAzureRepo>()
                 .BuildServiceProvider();
 
             return serviceProvider;

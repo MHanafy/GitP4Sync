@@ -4,6 +4,12 @@
 	"P4MaxChanges": "10",
 	"Scripts": "Git.ps1,P4.ps1",
 	"GithubInstallationId": "0",
+	"AutoSubmitEnabled": "false",
+	"GithubActionsSettings": {
+		"QueueName": "github",
+		"QueueConnectionString": "",
+		"CoolingTime": "300"
+	},
 	"SchedulerSettings": {
 		"InitialSleepTime": "500",
 		"MaxSleepTime": "300000",

@@ -81,7 +81,8 @@ function P4Submit($type, $id, $user, $desc, $shelve = 'y'){
             $log = p4 shelve -c $changelist 2>&1
             if($LastExitCode -ne 0) {throw "P4: failed to shelve changelist '$changelist'`r`n$log"}
             Write-Host "Shelved changelist '$changelist'"
-		} else
+		} 
+        else
         {
             $log = p4 submit -c $changelist 2>&1
             if($LastExitCode -ne 0) {throw "P4: failed to submit changelist '$changelist'`r`n$log"}
