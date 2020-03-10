@@ -6,6 +6,7 @@
 	"GithubInstallationId": "0",
 	"AutoSubmitEnabled": "false",
 	"GithubActionsSettings": {
+		"Enabled": "false", 
 		"QueueName": "github",
 		"QueueConnectionString": "",
 		"CoolingTime": "300"

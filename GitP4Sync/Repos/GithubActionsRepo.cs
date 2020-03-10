@@ -10,12 +10,17 @@ namespace GitP4Sync.Repos
 {
     internal class GithubActionsAzureRepo : IGithubActionsRepo<GithubAzureAction>
     {
+        public bool Enabled { get; }
         private readonly TimeSpan _coolingTime;
-
         private readonly CloudQueue _queue;
         private readonly CloudQueueClient _client;
+        private const string NotEnabled = "Github actions aren't enabled";
+        
         public GithubActionsAzureRepo(IOptions<GithubActionsSettings> options)
         {
+            Enabled = options.Value.Enabled;
+            if (!Enabled) return;
+
             _coolingTime = TimeSpan.FromSeconds(options.Value.CoolingTime);
             var account = CloudStorageAccount.Parse(options.Value.QueueConnectionString);
             _client = account.CreateCloudQueueClient();
@@ -28,6 +33,7 @@ namespace GitP4Sync.Repos
         /// <returns></returns>
         public async Task<GithubAzureAction> GetAction()
         {
+            if(!Enabled) throw new InvalidOperationException(NotEnabled);
             var message = await _queue.GetMessageAsync(_coolingTime, _client.DefaultRequestOptions, null);
             if (message == null) return null;
             var action = JsonConvert.DeserializeObject<GithubAction>(message.AsString);
@@ -40,6 +46,7 @@ namespace GitP4Sync.Repos
         /// <returns></returns>
         public async Task DeleteAction(GithubAzureAction action)
         {
+            if(!Enabled) throw new InvalidOperationException(NotEnabled);
             await _queue.DeleteMessageAsync(action.Message);
         }
 
@@ -49,6 +56,7 @@ namespace GitP4Sync.Repos
         /// <returns></returns>
         public async Task ReturnAction(GithubAzureAction action)
         {
+            if(!Enabled) throw new InvalidOperationException(NotEnabled);
             await _queue.UpdateMessageAsync(action.Message, TimeSpan.Zero , MessageUpdateFields.Visibility);
         }
 

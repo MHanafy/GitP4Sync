@@ -24,5 +24,9 @@ namespace GitP4Sync.Repos
         /// </summary>
         /// <returns></returns>
         Task ReturnAction(T action);
+        /// <summary>
+        /// A flag to indicate whether Actions are configured and enabled
+        /// </summary>
+        bool Enabled { get; }
     }
 }

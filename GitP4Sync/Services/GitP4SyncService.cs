@@ -63,7 +63,7 @@ namespace GitP4Sync.Services
                 var (hasChanges, needsSync) = await ProcessSubmitActions(token, repo);
                 var (hasChanges2, needsSync2) = await ProcessPullRequests(token, repo);
 
-                if (needsSync || needsSync2)
+                if (needsSync && needsSync2)
                 {
                     hasChanges |= hasChanges2 | await Sync();
                 }
@@ -85,6 +85,7 @@ namespace GitP4Sync.Services
 
         private async Task<(bool hasChanges, bool needsSync)> ProcessSubmitActions(InstallationToken token, string repo)
         {
+            if (!_actionsRepo.Enabled) return (false, true);
             var didSync = false;
             var hasChanges = false;
 
@@ -120,7 +121,7 @@ namespace GitP4Sync.Services
                         await _actionsRepo.DeleteAction(action);
                         continue;
                     }
-                    await SubmitToPerforce(token, repo, pull, checkRun, owner, reviewer, true);
+                    await SubmitToPerforce(token, repo, pull, checkRun, owner, reviewer);
                     await _actionsRepo.DeleteAction(action);
                     didSync = true;
                 }
@@ -162,7 +163,7 @@ namespace GitP4Sync.Services
                     var (owner, reviewer) = await GetUsers(token, pull, checkRun, reviewerLogin);
                     if (owner == null || reviewer == null) continue;
 
-                    if (owner.AutoSubmit)
+                    if (_actionsRepo.Enabled)
                     {
                         var action = new Action
                         {
@@ -180,10 +181,9 @@ namespace GitP4Sync.Services
                     }
                     else
                     {
-                        await SubmitToPerforce(token, repo, pull, checkRun, owner, reviewer, false);
+                        await SubmitToPerforce(token, repo, pull, checkRun, owner, reviewer);
+                        didSync = true;
                     }
-
-                    didSync = true;
                 }
                 catch (Exception e)
                 {
@@ -195,13 +195,13 @@ namespace GitP4Sync.Services
             return (hasChanges, !didSync);
         }
 
-        private async Task SubmitToPerforce(InstallationToken token, string repo, PullRequest pull, CheckRun checkRun,  User owner, User reviewer, bool submit)
+        private async Task SubmitToPerforce(InstallationToken token, string repo, PullRequest pull, CheckRun checkRun,  User owner, User reviewer)
         {
             var pullTitle = $"{pull.Title} | Reviewed by {reviewer.P4Login}";
-            var cmd = $"P4Submit commit {pull.Head.Sha} {owner.P4Login} '{pullTitle}' {(submit && _settings.AutoSubmitEnabled?'n':'y')}";
+            var cmd = $"P4Submit commit {pull.Head.Sha} {owner.P4Login} '{pullTitle}' {(owner.AutoSubmit && _settings.AutoSubmitEnabled?'n':'y')}";
             var result = await _script.Execute(cmd);
             var changeList = result[0].BaseObject;
-            if (submit && _settings.AutoSubmitEnabled)
+            if (owner.AutoSubmit && _settings.AutoSubmitEnabled)
             {
                 checkRun.Conclusion = CheckRun.RunConclusion.Success;
                 var summary = $"{SubmitMsg}; changelist '{changeList}'";
@@ -213,9 +213,9 @@ namespace GitP4Sync.Services
             else
             {
                 checkRun.Conclusion = CheckRun.RunConclusion.ActionRequired;
-                var summary = submit
+                var summary = owner.AutoSubmit
                     ? $"AutoSubmit is disabled, {ShelveMsg} changelist '{changeList}' "
-                    : $"{ShelveMsg} changelist '{changeList}'";
+                    : $"{ShelveMsg} changelist '{changeList}', Contact administrator to enable AutoSubmit for your account";
                 await _client.UpdateCheckRun(token, repo, checkRun.Id, CheckRun.RunStatus.InProgress,
                     CheckRun.RunConclusion.ActionRequired,
                     new CheckRunOutput {Title = $"{ShelveMsg} '{changeList}'", Summary = summary});
