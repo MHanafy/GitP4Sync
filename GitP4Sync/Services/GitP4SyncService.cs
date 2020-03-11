@@ -36,6 +36,7 @@ namespace GitP4Sync.Services
             _githubSettings = githubSettings.Value;
             _userRepo = userRepo;
             _actionsRepo = repo;
+            Logger.Info($"Service settings: {settings.Value}");
         }
 
         public async Task Start()
@@ -198,7 +199,7 @@ namespace GitP4Sync.Services
         private async Task SubmitToPerforce(InstallationToken token, string repo, PullRequest pull, CheckRun checkRun,  User owner, User reviewer)
         {
             var pullTitle = $"{pull.Title} | Reviewed by {reviewer.P4Login}";
-            var cmd = $"P4Submit commit {pull.Head.Sha} {owner.P4Login} '{pullTitle}' {(owner.AutoSubmit && _settings.AutoSubmitEnabled?'n':'y')}";
+            var cmd = $"P4Submit commit {pull.Head.Sha} {owner.P4Login} '{pullTitle}' {(owner.AutoSubmit && _settings.AutoSubmitEnabled?'n':'y')} {_settings.P4DeleteShelveDays}";
             var result = await _script.Execute(cmd);
             var changeList = result[0].BaseObject;
             if (owner.AutoSubmit && _settings.AutoSubmitEnabled)

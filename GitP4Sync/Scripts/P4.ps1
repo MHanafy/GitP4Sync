@@ -58,11 +58,11 @@ function P4GetLocalFileName($depotFileName){
     ([regex]::Matches($log, $exp))[0].Groups[1].Value
 }
 
-function P4Submit($type, $id, $user, $desc, $shelve = 'y'){
+function P4Submit($type, $id, $user, $desc, $shelve = 'y', $deleteShelveDays = 10){
     if($type -ne 'branch' -and $type -ne 'commit'){throw "Git: invalid parameter value for type: '$type' has be be one of ['commit', 'branch']" }
     Write-Host "P4: Starting P4Submit - $type '$id' User '$user' Desc '$desc' P4 client: '$Env:P4Client'"
 
-    P4ClearAll
+    P4ClearAll $deleteShelveDays
     $syncResult = GitP4Sync 1000 #force to sync all changes, typically shouldn't have more than a few if any due to continuous sync
     if(-not $syncResult.UpToDate){throw "P4: Coudn't sync all changes"}
 
@@ -100,7 +100,12 @@ function P4Submit($type, $id, $user, $desc, $shelve = 'y'){
     $changelist
 }
 
-function P4DeleteChange($changelist){
+function P4DeleteChange($changelist, $user = '', $deleteShelved = ''){
+    if($user){$Env:P4User = $user}
+    if($deleteShelved){
+        $output = p4 shelve -d -c $changelist 2>&1
+        if($LastExitCode -ne 0) {Write-Host "P4: failed to delete shelved files`r`n$output"}
+    }
     $output = P4 revert -c $changelist "//$Env:P4Client/..." 2>&1
     if($LastExitCode -eq 0) {Write-Host "P4: Reverted all files for change list '$changelist'"}
     else {Write-Host "P4: failed to revert files`r`n$output"}
@@ -109,17 +114,22 @@ function P4DeleteChange($changelist){
     else {Write-Host "P4: failed to delete change list '$changelist'`r`n$output"}
 }
 
-function P4ClearAll(){
+function P4ClearAll($deleteShelveDays){
     $workspace = $Env:P4Client
     Write-Host "P4: Started Deleting all change lists in workspace $workspace"
     $data = p4 changes -c $workspace -s pending
-    $changes = $data | Select-String -Pattern "Change\s(\d+)\son\s\d{4}"
-    if($changes.Matches.Count -eq 0){
+    $changes = [regex]::Matches($data, 'Change\s(\d+)\son\s(\d{4}\/\d{2}\/\d{2}) by (.*?)@') |
+    %{[PSCustomObject]@{User=$_.Groups[3].value; Number=$_.Groups[1].value; Date=[DateTime]::ParseExact($_.Groups[2].value,'yyyy/MM/dd',[CultureInfo].InvarianCulture)}}
+    if($changes.Count -eq 0){
         Write-Host "P4: No change lists found"
         return
 	}
-    foreach($match in $changes.Matches){
-        P4DeleteChange $match.Groups[1].Value
+    foreach($change in $changes){
+        if($change.Date -lt (Get-Date).AddDays(-1 * $deleteShelveDays)){
+            Write-Host "P4: Deleting shelved files for $change"
+            $deleteShelved = 'y'
+        }
+        P4DeleteChange $change.Number $change.User $deleteShelved
     }
     Write-Host "P4: Finished Deleting all change lists"
 }
