@@ -1,5 +1,5 @@
 
-function GitFetchMerge($type, $id){
+function GitFetchMerge($type, $id, $branch){
     if($type -ne 'branch' -and ($type -ne 'commit')){throw "Git: invalid parameter value for type: '$type' has be be one of ['commit', 'branch']" }
     $log = git fetch origin $id
 	if($LastExitCode -ne 0) {throw "Git: failed to fetch $type $id"}
@@ -17,11 +17,11 @@ function GitFetchMerge($type, $id){
   	if($LastExitCode -ne 0) {throw "Git: failed to checkout $type $id"}
     if($log){ Write-Host $log}
     
-    $log = git merge master -s resolve
+    $log = git merge $branch -s resolve
   	if($LastExitCode -ne 0) 
     {
         $log = git merge --abort
-        throw "Git: failed to merge $type $id on master"
+        throw "Git: failed to merge $type $id on $branch"
     }
     if($log){ Write-Host $log}
     $sBranch
@@ -97,16 +97,52 @@ function GitGetRemote(){
     }
 }
 
-function GitP4Sync($maxChanges = 10){
+function GitP4Sync($branch, $maxChanges = 10){
     Write-Host "P4 client: '$Env:P4Client'"
-    $log = git reset --hard origin/master
+    $log = git p4 sync --branch $branch --max-changes $maxChanges
+	if($LastExitCode -ne 0) {throw "Git: failed to do P4 sync: " + $log}
+	$upToDate = $log -Contains "No changes to import!"
+	if($log)
+    { 
+        Write-Host $log
+        $changeCount = ([regex]::Matches($log, "Importing revision \d+" )).count
+        $upToDate = $upToDate -or $changeCount -lt $maxChanges
+    }
+    #set local branch to the same point of P4 branch
+    $log = git update-ref "refs/heads/$branch" "refs/remotes/p4/$branch"
+    if($LastExitCode -ne 0) {throw "Git: failed to do update local branch ref: " + $log}
+	if($log){ Write-Host $log}
+
+    #push the branch, doesn't need checkout hence much faster
+    $log = git push origin release-2020.1
+    if($LastExitCode -ne 0) {throw "Git: failed to push to remote: " + $log}
+	if($log){ Write-Host $log}
+
+    $log = git log -n 1 "p4/$branch"
+    $change = ([regex]::Matches($log, '\[git-p4: depot-paths = "(.*?)": change = (\d+)]'))[0]
+    $depotPath = $change.Groups[1].Value
+    $lastChange = $change.Groups[2].Value
+	$log = git push
+	if($LastExitCode -ne 0) {throw "Git: failed to push $branch"}
+	if($log){ Write-Host $log}
+    [PSCustomObject]@{
+        DepotPath = $depotPath
+        ChangeCount = $changeCount
+        LastChange = $lastChange
+        UpToDate = $upToDate
+    }
+}
+
+function GitP4Sync2($branch, $maxChanges = 10){
+    Write-Host "P4 client: '$Env:P4Client'"
+    $log = git reset --hard "origin/$branch"
 	if($LastExitCode -ne 0) {throw "Git: failed to reset"}
 	$log = git clean -df
 	if($LastExitCode -ne 0) {throw "Git: failed to clean"}
-	$log = git checkout master -f
-	if($LastExitCode -ne 0) {throw "Git: failed to checkout master"}
+	$log = git checkout $branch -f
+	if($LastExitCode -ne 0) {throw "Git: failed to checkout $branch"}
 	if($log){ Write-Host $log}
-	$log = git p4 sync --max-changes $maxChanges
+	$log = git p4 sync --branch $branch --max-changes $maxChanges
 	if($LastExitCode -ne 0) {throw "Git: failed to do P4 sync: " + $log}
 	$upToDate = $log -Contains "No changes to import!"
 	if($log)
@@ -118,15 +154,15 @@ function GitP4Sync($maxChanges = 10){
     #clean up any stale rebase
     $log = git rebase --abort
 
-	$log = git rebase p4/master
-	if($LastExitCode -ne 0) {throw "Git: failed to rebase on p4/master"}
+	$log = git rebase "p4/$branch"
+	if($LastExitCode -ne 0) {throw "Git: failed to rebase on p4/$branch"}
 	if($log){ Write-Host $log}
-    $log = git log -n 1 p4/master
+    $log = git log -n 1 "p4/$branch"
     $change = ([regex]::Matches($log, '\[git-p4: depot-paths = "(.*?)": change = (\d+)]'))[0]
     $depotPath = $change.Groups[1].Value
     $lastChange = $change.Groups[2].Value
 	$log = git push
-	if($LastExitCode -ne 0) {throw "Git: failed to push master"}
+	if($LastExitCode -ne 0) {throw "Git: failed to push $branch"}
 	if($log){ Write-Host $log}
     [PSCustomObject]@{
         DepotPath = $depotPath

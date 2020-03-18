@@ -97,11 +97,19 @@ namespace GitP4Sync.Services
                 CheckRun checkRun = null;
                 try
                 {
+                    if (action.Action != GithubAction.ActionName.Requested)
+                    {
+                        Logger.Info(
+                            $"skipping submit request; action: '{action.Action}' pull '{action?.RequestedAction?.Id}' by '{action?.Sender?.Login}'");
+                        await _actionsRepo.DeleteAction(action);
+                        continue;
+                    }
+
                     if (action.CheckRun == null || !action.CheckRun.Output.Title.StartsWith(SubmitReadyMsg) ||
                         !long.TryParse(action.RequestedAction.Id, out var pullNumber))
                     {
                         Logger.Error(
-                            $"Invalid submit request; pull '{action?.RequestedAction?.Id}' by '{action?.Sender?.Login}'");
+                            $"Invalid submit request; action: '{action.Action}' pull '{action?.RequestedAction?.Id}' by '{action?.Sender?.Login}'");
                         await _actionsRepo.DeleteAction(action);
                         continue;
                     }
@@ -111,12 +119,7 @@ namespace GitP4Sync.Services
                     var pull = await _client.GetPullRequest(token, repo, pullNumber);
                     checkRun = await GetCheckRun(token, repo, pull.Id, pull.Head.Sha, true);
                     var reviewerLogin = await ValidatePull(token, repo, pull, checkRun);
-                    if (reviewerLogin == null)
-                    {
-                        await _actionsRepo.DeleteAction(action);
-                        continue;
-                    }
-                    var (owner, reviewer) = await GetUsers(token, pull, checkRun, reviewerLogin);
+                    var (owner, reviewer) = await GetUsers(token, repo, pull, checkRun, reviewerLogin);
                     if (owner == null || reviewer == null)
                     {
                         await _actionsRepo.DeleteAction(action);
@@ -148,7 +151,7 @@ namespace GitP4Sync.Services
             var hasChanges = false;
          
             var pulls = (await _client.GetPullRequests(token, repo))
-                .Where(x => x.Base.Ref == "master" && x.State == PullRequest.PullStatus.Open);
+                .Where(x => _settings.Branches.Contains(x.Base.Ref) && x.State == PullRequest.PullStatus.Open);
 
             foreach (var pull in pulls)
             {
@@ -160,8 +163,7 @@ namespace GitP4Sync.Services
                 {
                     var pullDetails = await _client.GetPullRequest(token, repo, pull.Number);
                     var reviewerLogin = await ValidatePull(token, repo, pullDetails, checkRun);
-                    if (reviewerLogin == null) continue;
-                    var (owner, reviewer) = await GetUsers(token, pull, checkRun, reviewerLogin);
+                    var (owner, reviewer) = await GetUsers(token, repo, pull, checkRun, reviewerLogin);
                     if (owner == null || reviewer == null) continue;
 
                     if (_actionsRepo.Enabled)
@@ -199,7 +201,7 @@ namespace GitP4Sync.Services
         private async Task SubmitToPerforce(InstallationToken token, string repo, PullRequest pull, CheckRun checkRun,  User owner, User reviewer)
         {
             var pullTitle = $"{pull.Title} | Reviewed by {reviewer.P4Login}";
-            var cmd = $"P4Submit commit {pull.Head.Sha} {owner.P4Login} '{pullTitle}' {(owner.AutoSubmit && _settings.AutoSubmitEnabled?'n':'y')} {_settings.P4DeleteShelveDays}";
+            var cmd = $"P4Submit commit {pull.Head.Sha} {pull.Base.Ref} {owner.P4Login} '{pullTitle}' {(owner.AutoSubmit && _settings.AutoSubmitEnabled?'n':'y')} {_settings.P4DeleteShelveDays}";
             var result = await _script.Execute(cmd);
             var changeList = result[0].BaseObject;
             if (owner.AutoSubmit && _settings.AutoSubmitEnabled)
@@ -260,30 +262,36 @@ namespace GitP4Sync.Services
             var review =
                 (await _client.GetReviews(token, repo, pull.Number)).FirstOrDefault(x =>
                     x.State == Review.ReviewState.Approved);
-            if (review == null)
-            {
-                checkRun.Conclusion = CheckRun.RunConclusion.ActionRequired;
-                var summary = "An approved code review is required before changes can be submitted to Perforce";
-                await _client.UpdateCheckRun(token, repo, checkRun.Id, CheckRun.RunStatus.InProgress,
-                    CheckRun.RunConclusion.ActionRequired,
-                    new CheckRunOutput
-                        {Title = "Code review required", Summary = summary});
-                Logger.Info(summary);
-                return null;
-            }
 
-            return review.User.Login;
+            return review?.User.Login;
         }
 
-        private async Task<(User Owner, User Reviewer)> GetUsers(InstallationToken token, PullRequest pull, CheckRun checkRun, string reviewerLogin)
+        private async Task<(User Owner, User Reviewer)> GetUsers(InstallationToken token, string repo, PullRequest pull, CheckRun checkRun, string reviewerLogin)
         {
             var user = await GetUser(token, pull.User.Login);
-            var reviewer = await GetUser(token, reviewerLogin);
-            if (user != null && reviewer != null) return (user, reviewer);
+            var reviewer = reviewerLogin == null ? null : await GetUser(token, reviewerLogin);
+            if (reviewerLogin == null)
+            {
+                if (user != null && !user.RequireCodeReview)
+                {
+                    Logger.Warn($"Skipping code review requirement for {user.GithubLogin} as configured in users.json");
+                    reviewer = user;
+                } else
+                {            
+                    checkRun.Conclusion = CheckRun.RunConclusion.ActionRequired;
+                    var reviewRequired = "An approved code review is required before changes can be submitted to Perforce";
+                    await _client.UpdateCheckRun(token, repo, checkRun.Id, CheckRun.RunStatus.InProgress,
+                        CheckRun.RunConclusion.ActionRequired,
+                        new CheckRunOutput
+                            {Title = "Code review required", Summary = reviewRequired});
+                    Logger.Info(reviewRequired);
+                }
+            }
+            if (user != null && (reviewerLogin == null || reviewer != null)) return (user, reviewer);
 
             checkRun.Conclusion = CheckRun.RunConclusion.ActionRequired;
             var userStr = user == null ? $"'{pull.User.Login}'" : null;
-            var reviewerStr = reviewer == null ? $"'{reviewerLogin}'" : null;
+            var reviewerStr = reviewerLogin !=null && reviewer == null ? $"'{reviewerLogin}'" : null;
             var unmappedUsers =
                 $"User{(userStr != null && reviewerStr != null ? "(s)" : null)} {userStr}{(userStr != null && reviewerStr != null ? " and " : null)}{reviewerStr}";
             var summary =
@@ -345,17 +353,21 @@ namespace GitP4Sync.Services
 
         private async Task<bool> Sync()
         {
-            var upToDate = false;
             bool? hadChanges = null;
-            while (!upToDate)
+            foreach (var branch in _settings.Branches)
             {
-                var result = await _script.Execute($"GitP4Sync {_settings.P4MaxChanges}");
-                //this script function should always return a bool
-                upToDate = (bool) result[0].Properties["UpToDate"].Value;
-                //see if the first call had changes
-                if (hadChanges == null) hadChanges = !upToDate;
+                var upToDate = false;
+                while (!upToDate)
+                {
+                    var result = await _script.Execute($"GitP4Sync {branch} {_settings.P4MaxChanges}");
+                    //this script function should always return a bool
+                    upToDate = (bool) result[0].Properties["UpToDate"].Value;
+                    //see if the first call had changes
+                    if (hadChanges == null) hadChanges = !upToDate;
+                }
             }
-            return hadChanges.Value;
+
+            return hadChanges ?? false;
         }
         
     }

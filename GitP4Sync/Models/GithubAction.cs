@@ -20,6 +20,14 @@ namespace GitP4Sync.Models
 
     public class GithubAction : IGithubAction
     {
+        public static class ActionName
+        {
+            public const string Created = "created";
+            public const string Completed = "completed";
+            public const string ReRequested = "rerequested";
+            public const string Requested = "requested_action";
+        }
+
         [JsonProperty("action")]
         public string Action { get; set; }
 

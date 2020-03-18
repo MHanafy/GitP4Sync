@@ -1,4 +1,6 @@
 ﻿
+using System.Collections.Generic;
+
 namespace GitP4Sync.Models
 {
     class Settings
@@ -9,9 +11,10 @@ namespace GitP4Sync.Models
         public int P4MaxChanges { get; set; } = 10;
         public int P4DeleteShelveDays { get; set; } = 10;
         public long GithubInstallationId { get; set; }
+        public HashSet<string> Branches { get; set; }
         public bool AutoSubmitEnabled { get; set; }
 
         public override string ToString() =>
-            $"{nameof(P4MaxChanges)}={P4MaxChanges} {nameof(P4DeleteShelveDays)}={P4DeleteShelveDays} {nameof(AutoSubmitEnabled)}={AutoSubmitEnabled}";
+            $"{nameof(P4MaxChanges)}={P4MaxChanges} {nameof(P4DeleteShelveDays)}={P4DeleteShelveDays} {nameof(AutoSubmitEnabled)}={AutoSubmitEnabled} {nameof(Branches)}: '{string.Join(',', Branches)}'";
     }
 }

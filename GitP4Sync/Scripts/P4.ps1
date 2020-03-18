@@ -58,20 +58,20 @@ function P4GetLocalFileName($depotFileName){
     ([regex]::Matches($log, $exp))[0].Groups[1].Value
 }
 
-function P4Submit($type, $id, $user, $desc, $shelve = 'y', $deleteShelveDays = 10){
+function P4Submit($type, $id, $branch, $user, $desc, $shelve = 'y', $deleteShelveDays = 10){
     if($type -ne 'branch' -and $type -ne 'commit'){throw "Git: invalid parameter value for type: '$type' has be be one of ['commit', 'branch']" }
     Write-Host "P4: Starting P4Submit - $type '$id' User '$user' Desc '$desc' P4 client: '$Env:P4Client'"
 
     P4ClearAll $deleteShelveDays
-    $syncResult = GitP4Sync 1000 #force to sync all changes, typically shouldn't have more than a few if any due to continuous sync
+    $syncResult = GitP4Sync $branch 1000 #force to sync all changes, typically shouldn't have more than a few if any due to continuous sync
     if(-not $syncResult.UpToDate){throw "P4: Coudn't sync all changes"}
 
     $lastChange = $syncResult.LastChange
     $depot = $syncResult.DepotPath
 
-    $sBranch = GitFetchMerge $type $id
+    $sBranch = GitFetchMerge $type $id $branch
     $Env:P4User = $user
-    $changes = GitGetChanges 'master' $sBranch
+    $changes = GitGetChanges $branch $sBranch
     $changelist = P4Checkout $changes $depot $desc
     $log = p4 changes -m 1 -s submitted "$depot..."
     if($LastExitCode -ne 0) {throw "P4: failed to get submitted changes"}
@@ -93,7 +93,7 @@ function P4Submit($type, $id, $user, $desc, $shelve = 'y', $deleteShelveDays = 1
         throw "A change is detected, aborting submit"
 	}
 
-    $log = git checkout master
+    $log = git checkout $branch
     if($log){ Write-Host $log}
     $log = git branch -D $sBranch
     if($log){ Write-Host $log}
