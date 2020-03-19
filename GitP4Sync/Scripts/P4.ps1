@@ -118,8 +118,12 @@ function P4ClearAll($deleteShelveDays){
     $workspace = $Env:P4Client
     Write-Host "P4: Started Deleting all change lists in workspace $workspace"
     $data = p4 changes -c $workspace -s pending
-    $changes = [regex]::Matches($data, 'Change\s(\d+)\son\s(\d{4}\/\d{2}\/\d{2}) by (.*?)@') |
-    %{[PSCustomObject]@{User=$_.Groups[3].value; Number=$_.Groups[1].value; Date=[DateTime]::ParseExact($_.Groups[2].value,'yyyy/MM/dd',[CultureInfo].InvarianCulture)}}
+    if($data){
+        $matches = [regex]::Matches($data, 'Change\s(\d+)\son\s(\d{4}\/\d{2}\/\d{2}) by (.*?)@')
+	}
+    if($matches){
+        $changes = $matches | %{[PSCustomObject]@{User=$_.Groups[3].value; Number=$_.Groups[1].value; Date=[DateTime]::ParseExact($_.Groups[2].value,'yyyy/MM/dd',[CultureInfo].InvarianCulture)}}
+	}
     if($changes.Count -eq 0){
         Write-Host "P4: No change lists found"
         return

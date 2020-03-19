@@ -4,16 +4,20 @@ function GitFetchMerge($type, $id, $branch){
     $log = git fetch origin $id
 	if($LastExitCode -ne 0) {throw "Git: failed to fetch $type $id"}
     if($log){ Write-Host $log}
-    $sBranch = "$id-GitP4Submit";
-    $log = git branch -D $sBranch #delete the branch if already there
+    $log = git reset --hard
+	if($LastExitCode -ne 0) {throw "Git: failed to reset"}
+	$log = git clean -df
+	if($LastExitCode -ne 0) {throw "Git: failed to clean"}
+    $nBranch = "$id-GitP4Submit";
+    $log = git branch -D $nBranch #delete the branch if already there
     if($log){ Write-Host $log}
     
     if($type -eq 'commit'){
-     $branch = $id
+     $target = $id
 	} else{
-     $branch = "origin/$id"
+     $target = "origin/$id"
 	}
-    $log = git checkout -b $sBranch $branch --no-track
+    $log = git checkout -b $nbranch $target --no-track
   	if($LastExitCode -ne 0) {throw "Git: failed to checkout $type $id"}
     if($log){ Write-Host $log}
     
@@ -21,10 +25,10 @@ function GitFetchMerge($type, $id, $branch){
   	if($LastExitCode -ne 0) 
     {
         $log = git merge --abort
-        throw "Git: failed to merge $type $id on $branch"
+        throw "Git: failed to merge $branch into $type $id"
     }
     if($log){ Write-Host $log}
-    $sBranch
+    $nBranch
 }
 
 function GitSetToken($token){
@@ -114,7 +118,7 @@ function GitP4Sync($branch, $maxChanges = 10){
 	if($log){ Write-Host $log}
 
     #push the branch, doesn't need checkout hence much faster
-    $log = git push origin release-2020.1
+    $log = git push origin "${branch}:${branch}"
     if($LastExitCode -ne 0) {throw "Git: failed to push to remote: " + $log}
 	if($log){ Write-Host $log}
 
@@ -122,9 +126,7 @@ function GitP4Sync($branch, $maxChanges = 10){
     $change = ([regex]::Matches($log, '\[git-p4: depot-paths = "(.*?)": change = (\d+)]'))[0]
     $depotPath = $change.Groups[1].Value
     $lastChange = $change.Groups[2].Value
-	$log = git push
-	if($LastExitCode -ne 0) {throw "Git: failed to push $branch"}
-	if($log){ Write-Host $log}
+
     [PSCustomObject]@{
         DepotPath = $depotPath
         ChangeCount = $changeCount
