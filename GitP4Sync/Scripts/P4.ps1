@@ -14,8 +14,7 @@
                         $log = p4 sync -f "$localFileName" 2>&1
                         if($LastExitCode -ne 0) {throw "P4: failed to sync '$fileName'`r`n$log"}
                         if(-not ($log -match "no such file\(s\)")) {throw "P4: Same file name was added by another user '$localFileName'`r`n$log"}
-                        $log = Copy-Item $fileName "$localFileName"
-                        if($LastExitCode -ne 0) {throw "P4: failed to copy '$fileName'`r`n$log"}
+                        CopyFile $fileName $localFileName
                         $log = P4 add -c $changelist "$localFileName" 2>&1
                         if($LastExitCode -ne 0) {throw "P4: failed to add '$fileName'`r`n$log"}
                     } 
@@ -33,8 +32,7 @@
                         {
                             throw "P4: failed to checkout file '$fileName'`r`n$output"
                         }
-                        $log = Copy-Item $fileName "$localFileName"
-                        if($LastExitCode -ne 0) {throw "P4: failed to copy '$fileName'`r`n$log"}
+                        CopyFile $fileName $localFileName
                         $log = P4 edit -c $changelist "$localFileName" 2>&1
                         if($LastExitCode -ne 0) {throw "P4: failed to edit '$fileName'`r`n$log"}
                     }
@@ -49,6 +47,14 @@
 	}
     Write-Host "P4: Finished checkout"
     $changelist
+}
+
+function CopyFile($src, $dest){
+    #Create the parent directory if it doesn't exist, to avoid copy errors for non-existent paths
+    $dir = [System.IO.Path]::GetDirectoryName($dest)
+    $log = New-Item -Type dir $dir -ErrorAction Ignore
+    $log = Copy-Item $src $dest
+    if(-not $?) {throw "P4: failed to copy '$src'`r`n$log"}
 }
 
 function P4GetLocalFileName($depotFileName){
