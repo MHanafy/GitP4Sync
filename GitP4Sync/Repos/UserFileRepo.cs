@@ -52,7 +52,7 @@ namespace GitP4Sync.Repos
                         Logger.Warn($"Invalid or duplicate user '{user.GithubLogin}'");
                     }
 
-                    if (user.AutoSubmit)
+                    if (user.AutoSubmit ?? false)
                     {
                         Logger.Warn($"User: {user.GithubLogin} is set to {nameof(User.AutoSubmit)}");
                     }
