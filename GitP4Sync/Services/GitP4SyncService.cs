@@ -201,10 +201,11 @@ namespace GitP4Sync.Services
         private async Task SubmitToPerforce(InstallationToken token, string repo, PullRequest pull, CheckRun checkRun,  User owner, User reviewer)
         {
             var pullTitle = $"{pull.Title} | Reviewed by {reviewer.P4Login}";
-            var cmd = $"P4Submit commit {pull.Head.Sha} {pull.Base.Ref} {owner.P4Login} '{pullTitle}' {(owner.AutoSubmit && _settings.AutoSubmitEnabled?'n':'y')} {_settings.P4DeleteShelveDays}";
+            var userAutoSubmit = owner.AutoSubmit ?? _settings.AutoSubmitDefault;
+            var cmd = $"P4Submit commit {pull.Head.Sha} {pull.Base.Ref} {owner.P4Login} '{pullTitle}' {(userAutoSubmit && _settings.AutoSubmitEnabled?'n':'y')} {_settings.P4DeleteShelveDays}";
             var result = await _script.Execute(cmd);
             var changeList = result[0].BaseObject;
-            if (owner.AutoSubmit && _settings.AutoSubmitEnabled)
+            if (userAutoSubmit && _settings.AutoSubmitEnabled)
             {
                 checkRun.Conclusion = CheckRun.RunConclusion.Success;
                 var summary = $"{SubmitMsg}; changelist '{changeList}'";
@@ -216,7 +217,7 @@ namespace GitP4Sync.Services
             else
             {
                 checkRun.Conclusion = CheckRun.RunConclusion.ActionRequired;
-                var summary = owner.AutoSubmit
+                var summary = userAutoSubmit
                     ? $"AutoSubmit is disabled, {ShelveMsg} changelist '{changeList}' "
                     : $"{ShelveMsg} changelist '{changeList}', Contact administrator to enable AutoSubmit for your account";
                 await _client.UpdateCheckRun(token, repo, checkRun.Id, CheckRun.RunStatus.InProgress,
