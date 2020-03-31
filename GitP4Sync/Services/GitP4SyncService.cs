@@ -26,6 +26,12 @@ namespace GitP4Sync.Services
         private readonly UserFileRepo _userRepo;
         private readonly IGithubActionsRepo<GithubAzureAction> _actionsRepo;
 
+        private enum Stage
+        {
+            Validate,
+            Submit
+        }
+
         public GitP4SyncService(IScheduler scheduler, GithubHttpClient client, ScriptService script,
             IOptions<Settings> settings, IOptions<GithubSettings> githubSettings, UserFileRepo userRepo, IGithubActionsRepo<GithubAzureAction> repo)
         {
@@ -131,7 +137,7 @@ namespace GitP4Sync.Services
                 }
                 catch (Exception e)
                 {
-                    if (checkRun != null) await UpdateCheckRunError(e, token, repo, checkRun.Id);
+                    if (checkRun != null) await UpdateCheckRunError(e, token, repo, checkRun.Id, Stage.Submit);
                     Logger.Error(e);
                     //Always delete the request, because we'll telling the user about it and they can click to retry if desired.
                     await _actionsRepo.DeleteAction(action);
@@ -190,7 +196,7 @@ namespace GitP4Sync.Services
                 }
                 catch (Exception e)
                 {
-                    await UpdateCheckRunError(e, token, repo, checkRun.Id);
+                    await UpdateCheckRunError(e, token, repo, checkRun.Id, Stage.Validate);
                     Logger.Error(e);
                 }
             }
@@ -229,11 +235,12 @@ namespace GitP4Sync.Services
             Logger.Info($"Closed pull request {pull.Number}");
         }
 
-        private async Task UpdateCheckRunError(Exception e, InstallationToken token, string repo, long checkRunId)
+        private async Task UpdateCheckRunError(Exception e, InstallationToken token, string repo, long checkRunId, Stage stage, int? retries = null)
         {
+            var retryStr = retries == null ? null : $"[retry {retries} out of {_settings.Retries}]";
             await _client.UpdateCheckRun(token, repo, checkRunId, CheckRun.RunStatus.InProgress,
                 CheckRun.RunConclusion.ActionRequired,
-                new CheckRunOutput {Title = $"Unexpected error: {e.GetType().Name}'", Summary = e.Message});
+                new CheckRunOutput {Title = $"Unexpected {stage} error'", Summary = $"Error during '{stage}' {retryStr}\r\n{e.Message}"});
         }
 
         private async Task<string> ValidatePull(InstallationToken token, string repo, DetailedPullRequest pull,
@@ -355,17 +362,25 @@ namespace GitP4Sync.Services
         private async Task<bool> Sync()
         {
             bool? hadChanges = null;
-            foreach (var branch in _settings.Branches)
+            try
             {
-                var upToDate = false;
-                while (!upToDate)
+                foreach (var branch in _settings.Branches)
                 {
-                    var result = await _script.Execute($"GitP4Sync {branch} {_settings.P4MaxChanges}");
-                    //this script function should always return a bool
-                    upToDate = (bool) result[0].Properties["UpToDate"].Value;
-                    //see if the first call had changes
-                    if (hadChanges == null) hadChanges = !upToDate;
+                    var upToDate = false;
+                    while (!upToDate)
+                    {
+                        var result = await _script.Execute($"GitP4Sync {branch} {_settings.P4MaxChanges}");
+                        upToDate = (bool) result[0].Properties["UpToDate"].Value;
+                        //see if the first call had changes
+                        if (hadChanges == null) hadChanges = !upToDate;
+                    }
                 }
+            }
+            catch (Exception e)
+            {
+                //If an exception is caught no need to immediately retry to give a chance to recover, wait for the next run.
+                Logger.Error(e);
+                return true;
             }
 
             return hadChanges ?? false;
