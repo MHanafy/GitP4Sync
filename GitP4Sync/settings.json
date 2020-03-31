@@ -1,6 +1,7 @@
 ﻿{
 	"WorkDir": "C:\\Temp\\clone2\\",
 	"P4Client": "GitSubmit",
+	"Retries": "3",
 	"P4MaxChanges": "10",
 	"P4DeleteShelveDays": "10",
 	"Scripts": "Git.ps1,P4.ps1",

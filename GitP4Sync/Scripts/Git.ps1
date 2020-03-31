@@ -2,30 +2,37 @@
 function GitFetchMerge($type, $id, $branch){
     if($type -ne 'branch' -and ($type -ne 'commit')){throw "Git: invalid parameter value for type: '$type' has be be one of ['commit', 'branch']" }
     $log = git fetch origin $id
-	if($LastExitCode -ne 0) {throw "Git: failed to fetch $type $id"}
+	if($LastExitCode -ne 0) {throw "Git: failed to fetch $type $id`r`n$log"}
     if($log){ Write-Host $log}
     $log = git reset --hard
-	if($LastExitCode -ne 0) {throw "Git: failed to reset"}
+	if($LastExitCode -ne 0) {throw "Git: failed to reset`r`n$log"}
 	$log = git clean -df
-	if($LastExitCode -ne 0) {throw "Git: failed to clean"}
+	if($LastExitCode -ne 0) {throw "Git: failed to clean`r`n$log"}
+
+    #checkout base branch first, to delete the old target branch if it already exists
+    $log = git checkout $branch
+    if($LastExitCode -ne 0) {throw "Git: failed to checkout $branch`r`n$log"}
+    if($log){ Write-Host $log}
+
     $nBranch = "$id-GitP4Submit";
     $log = git branch -D $nBranch #delete the branch if already there
     if($log){ Write-Host $log}
-    
+
+    #check out base branch then merge from target branch, this is more efficient to avoid updating worktree multiple times in case of old branches
+    $log = git checkout -b $nBranch $branch 
+    if($LastExitCode -ne 0) {throw "Git: failed to checkout $nBranch`r`n$log"}
+    if($log){ Write-Host $log}
+
     if($type -eq 'commit'){
      $target = $id
 	} else{
      $target = "origin/$id"
 	}
-    $log = git checkout -b $nbranch $target --no-track
-  	if($LastExitCode -ne 0) {throw "Git: failed to checkout $type $id"}
-    if($log){ Write-Host $log}
-    
-    $log = git merge $branch -s resolve
+    $log = git merge $target -s resolve
   	if($LastExitCode -ne 0) 
     {
         $log = git merge --abort
-        throw "Git: failed to merge $branch into $type $id"
+        throw "Git: failed to merge $branch into $type $id`r`n$log"
     }
     if($log){ Write-Host $log}
     $nBranch
@@ -34,7 +41,7 @@ function GitFetchMerge($type, $id, $branch){
 function GitSetToken($token){
     $log = git remote -v
     $remote = ([regex]::Matches($log, 'https:\/\/(?>x\-access\-token:.*?@)?(github.com\/.*\/.*) \(fetch\)'))
-    if(-not $remote){throw "Git: Failed to read git repo remote, ensure this is a github repo"}
+    if(-not $remote){throw "Git: Failed to read git repo remote, ensure this is a github repo`r`n$log"}
     if($remote.Count -ne 1){throw "Git: Multiple remotes aren't supported, Please ensure to have a single remote in the repo'"}
     $repoUrl = $remote[0].Groups[1].Value
     $log = git remote set-url origin "https://x-access-token:$token@$repoUrl"
@@ -93,7 +100,7 @@ function GitGetChanges2($baseBranch, $branch =''){
 
 function GitGetRemote(){
     $data = git remote -v
-    if($LastExitCode -ne 0) {throw "Git: failed to list remote"}
+    if($LastExitCode -ne 0) {throw "Git: failed to list remote`r`n$data"}
     $match = ([regex]::Matches($data, 'origin\s*.*https:\/\/(?>x\-access\-token:.*?@)?github\.com\/(.*)\/(.*).git\/?\s\(fetch\)'))[0]
     [PSCustomObject]@{
         Owner = $match.Groups[1].Value
@@ -138,11 +145,11 @@ function GitP4Sync($branch, $maxChanges = 10){
 function GitP4Sync2($branch, $maxChanges = 10){
     Write-Host "P4 client: '$Env:P4Client'"
     $log = git reset --hard "origin/$branch"
-	if($LastExitCode -ne 0) {throw "Git: failed to reset"}
+	if($LastExitCode -ne 0) {throw "Git: failed to reset`r`n$log"}
 	$log = git clean -df
-	if($LastExitCode -ne 0) {throw "Git: failed to clean"}
+	if($LastExitCode -ne 0) {throw "Git: failed to clean`r`n$log"}
 	$log = git checkout $branch -f
-	if($LastExitCode -ne 0) {throw "Git: failed to checkout $branch"}
+	if($LastExitCode -ne 0) {throw "Git: failed to checkout $branch`r`n$log"}
 	if($log){ Write-Host $log}
 	$log = git p4 sync --branch $branch --max-changes $maxChanges
 	if($LastExitCode -ne 0) {throw "Git: failed to do P4 sync: " + $log}
@@ -157,14 +164,14 @@ function GitP4Sync2($branch, $maxChanges = 10){
     $log = git rebase --abort
 
 	$log = git rebase "p4/$branch"
-	if($LastExitCode -ne 0) {throw "Git: failed to rebase on p4/$branch"}
+	if($LastExitCode -ne 0) {throw "Git: failed to rebase on p4/$branch`r`n$log"}
 	if($log){ Write-Host $log}
     $log = git log -n 1 "p4/$branch"
     $change = ([regex]::Matches($log, '\[git-p4: depot-paths = "(.*?)": change = (\d+)]'))[0]
     $depotPath = $change.Groups[1].Value
     $lastChange = $change.Groups[2].Value
 	$log = git push
-	if($LastExitCode -ne 0) {throw "Git: failed to push $branch"}
+	if($LastExitCode -ne 0) {throw "Git: failed to push $branch`r`n$log"}
 	if($log){ Write-Host $log}
     [PSCustomObject]@{
         DepotPath = $depotPath
