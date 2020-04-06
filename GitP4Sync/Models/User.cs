@@ -2,7 +2,7 @@
 
 namespace GitP4Sync.Models
 {
-    internal class User
+    public class User
     {
         public string GithubLogin { get; set; }
         public string P4Login { get; set; }

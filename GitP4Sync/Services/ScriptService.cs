@@ -8,7 +8,7 @@ using Microsoft.Extensions.Options;
 
 namespace GitP4Sync.Services
 {
-    internal class ScriptService
+    public class ScriptService : IScriptService
     {
         private static readonly NLog.Logger Logger = NLog.LogManager.GetCurrentClassLogger();
         private readonly PowerShell _shell;

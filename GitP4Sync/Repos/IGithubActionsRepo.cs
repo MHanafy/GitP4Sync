@@ -4,7 +4,7 @@ using GitP4Sync.Models;
 namespace GitP4Sync.Repos
 {
 
-    internal interface IGithubActionsRepo<T>
+    public interface IGithubActionsRepo<T>
         where T:IGithubAction
     {
         /// <summary>

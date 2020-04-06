@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using GitP4Sync.Models;
 using GitP4Sync.Repos;
@@ -14,17 +15,17 @@ using User = GitP4Sync.Models.User;
 
 namespace GitP4Sync.Services
 {
-    class GitP4SyncService
+    public class GitP4SyncService
     {
         private static readonly NLog.Logger Logger = NLog.LogManager.GetCurrentClassLogger();
 
         private readonly IScheduler _scheduler;
-        private readonly GithubHttpClient _client;
-        private readonly ScriptService _script;
+        private readonly IGithubClient _client;
+        private readonly IScriptService _script;
         private readonly Settings _settings;
         private readonly GithubSettings _githubSettings;
-        private readonly UserFileRepo _userRepo;
-        private readonly IGithubActionsRepo<GithubAzureAction> _actionsRepo;
+        private readonly IUserRepo _userRepo;
+        private readonly IGithubActionsRepo<IGithubAzureAction> _actionsRepo;
 
         private enum Stage
         {
@@ -32,8 +33,8 @@ namespace GitP4Sync.Services
             Submit
         }
 
-        public GitP4SyncService(IScheduler scheduler, GithubHttpClient client, ScriptService script,
-            IOptions<Settings> settings, IOptions<GithubSettings> githubSettings, UserFileRepo userRepo, IGithubActionsRepo<GithubAzureAction> repo)
+        public GitP4SyncService(IScheduler scheduler, IGithubClient client, IScriptService script,
+            IOptions<Settings> settings, IOptions<GithubSettings> githubSettings, IUserRepo userRepo, IGithubActionsRepo<IGithubAzureAction> repo)
         {
             _scheduler = scheduler;
             _client = client;
@@ -86,11 +87,15 @@ namespace GitP4Sync.Services
             }
         }
 
-        private const string ShelveMsg = "Changes were shelved to";
-        private const string SubmitReadyMsg = "Ready to submit, Click submit to continue";
-        private const string SubmitMsg = "Changes were submitted to Perforce";
+        public static class Messages
+        {
+            public const string ShelveMsg = "Changes were shelved to";
+            public const string SubmitReadyMsg = "Ready to submit, Click submit to continue";
+            public const string SubmitMsg = "Changes were submitted to Perforce";
+        }
 
-        private async Task<(bool hasChanges, bool needsSync)> ProcessSubmitActions(InstallationToken token, string repo)
+
+        public async Task<(bool hasChanges, bool needsSync)> ProcessSubmitActions(InstallationToken token, string repo)
         {
             if (!_actionsRepo.Enabled) return (false, true);
             var didSync = false;
@@ -100,47 +105,13 @@ namespace GitP4Sync.Services
             while (action != null)
             {
                 hasChanges = true;
-                CheckRun checkRun = null;
                 try
                 {
-                    if (action.Action != GithubAction.ActionName.Requested)
-                    {
-                        Logger.Info(
-                            $"skipping submit request; action: '{action.Action}' pull '{action?.RequestedAction?.Id}' by '{action?.Sender?.Login}'");
-                        await _actionsRepo.DeleteAction(action);
-                        continue;
-                    }
-
-                    if (action.CheckRun == null || !action.CheckRun.Output.Title.StartsWith(SubmitReadyMsg) ||
-                        !long.TryParse(action.RequestedAction.Id, out var pullNumber))
-                    {
-                        Logger.Error(
-                            $"Invalid submit request; action: '{action.Action}' pull '{action?.RequestedAction?.Id}' by '{action?.Sender?.Login}'");
-                        await _actionsRepo.DeleteAction(action);
-                        continue;
-                    }
-
-                    Logger.Info($"Started submitting pull {action.RequestedAction.Id} by {action.Sender.Login}");
-
-                    var pull = await _client.GetPullRequest(token, repo, pullNumber);
-                    checkRun = await GetCheckRun(token, repo, pull.Id, pull.Head.Sha, true);
-                    var reviewerLogin = await ValidatePull(token, repo, pull, checkRun);
-                    var (owner, reviewer) = await GetUsers(token, repo, pull, checkRun, reviewerLogin);
-                    if (owner == null || reviewer == null)
-                    {
-                        await _actionsRepo.DeleteAction(action);
-                        continue;
-                    }
-                    await SubmitToPerforce(token, repo, pull, checkRun, owner, reviewer);
-                    await _actionsRepo.DeleteAction(action);
-                    didSync = true;
+                    didSync = await ProcessAction(token,repo, action);
                 }
                 catch (Exception e)
                 {
-                    if (checkRun != null) await UpdateCheckRunError(e, token, repo, checkRun.Id, Stage.Submit);
                     Logger.Error(e);
-                    //Always delete the request, because we'll telling the user about it and they can click to retry if desired.
-                    await _actionsRepo.DeleteAction(action);
                 }
                 finally
                 {
@@ -151,7 +122,66 @@ namespace GitP4Sync.Services
             return (hasChanges, !didSync);
         }
 
-        private async Task<(bool hasChanges, bool needsSync)> ProcessPullRequests(InstallationToken token, string repo)
+        public async Task<bool> ProcessAction(InstallationToken token, string repo, IGithubAzureAction action)
+        {
+            if (action.Action != GithubAction.ActionName.Requested)
+            {
+                Logger.Info(
+                    $"skipping submit request; action: '{action.Action}' pull '{action.RequestedAction?.Id}' by '{action.Sender?.Login}'");
+                await _actionsRepo.DeleteAction(action);
+                return false;
+            }
+
+            if (action.CheckRun == null || !action.CheckRun.Output.Title.StartsWith(Messages.SubmitReadyMsg) ||
+                !long.TryParse(action.RequestedAction.Id, out var pullNumber))
+            {
+                Logger.Error(
+                    $"Invalid submit request; action: '{action.Action}' pull '{action.RequestedAction?.Id}' by '{action.Sender?.Login}'");
+                await _actionsRepo.DeleteAction(action);
+                return false;
+            }
+
+            Logger.Info($"Started submitting pull {action.RequestedAction.Id} by {action.Sender.Login}");
+
+            var pull = await _client.GetPullRequest(token, repo, pullNumber);
+            var checkRun = await GetCheckRun(token, repo, pull.Id, pull.Head.Sha, true);
+            try
+            {
+                var reviewerLogin = await ValidatePull(token, repo, pull, checkRun);
+                var (owner, reviewer) = await GetUsers(token, repo, pull, checkRun, reviewerLogin);
+                if (owner == null || reviewer == null || pull.State != "open")
+                {
+                    //Ignore the request if conditions changed, or if the pull request was closed
+                    return false;
+                }
+
+                //When processing a user submit request, always reset the retries counter to start over
+                await SubmitToPerforce(token, repo, pull, checkRun, owner, reviewer, null);
+                return true;
+            }
+            catch (Exception e)
+            {
+                await UpdateCheckRunError(e, token, repo, pull.Number, checkRun.Id, Stage.Submit);
+                Logger.Error(e);
+                return true;
+            }
+            finally
+            {
+                //Always delete the request, because we'll tell the user about it and they can click to retry if desired.
+                await _actionsRepo.DeleteAction(action);
+            }
+        }
+
+
+        private readonly Regex _regexSubmitRetry =
+            new Regex(@"Error during 'Submit' \[retry (\d+) out of \d+\]", RegexOptions.Compiled);
+        private int? GetSubmitRetries(CheckRun checkRun)
+        {
+            var match = _regexSubmitRetry.Match(checkRun.Output.Summary);
+            return match.Success ? (int?)int.Parse(match.Groups[1].Value) : null;
+        }
+
+        public async Task<(bool hasChanges, bool needsSync)> ProcessPullRequests(InstallationToken token, string repo)
         {
             var didSync = false;
             var hasChanges = false;
@@ -172,31 +202,37 @@ namespace GitP4Sync.Services
                     var (owner, reviewer) = await GetUsers(token, repo, pull, checkRun, reviewerLogin);
                     if (owner == null || reviewer == null) continue;
 
+                    var retries = GetSubmitRetries(checkRun);
                     if (_actionsRepo.Enabled)
                     {
-                        var action = new Action
+                        if (retries != null)
                         {
-                            Label = "Submit to Perforce", Identifier = pull.Number.ToString(),
-                            Description = "Submit changes and close pull request"
-                        };
-                        await _client.UpdateCheckRun(token, repo, checkRun.Id, CheckRun.RunStatus.InProgress,
-                            CheckRun.RunConclusion.ActionRequired,
-                            new CheckRunOutput
-                            {
-                                Title = $"{SubmitReadyMsg}",
-                                Summary = "Changes are ready to be submitted to Perforce, Click submit to continue."
-                            }, DateTime.UtcNow, new List<Action> {action});
-                        Logger.Info($"Pull {pull.Number} is ready to be submitted");
+                            //retrying, submit instead of showing the submit button
+                            await SubmitToPerforce(token, repo, pull, checkRun, owner, reviewer, retries);
+                            didSync = true;
+                        }
+                        else
+                        {
+                            var actions = new List<Action> {GetSubmitAction(pull.Number)};
+                            await _client.UpdateCheckRun(token, repo, checkRun.Id, CheckRun.RunStatus.InProgress,
+                                CheckRun.RunConclusion.ActionRequired,
+                                new CheckRunOutput
+                                {
+                                    Title = $"{Messages.SubmitReadyMsg}",
+                                    Summary = "Changes are ready to be submitted to Perforce, Click submit to continue."
+                                }, DateTime.UtcNow, actions);
+                            Logger.Info($"Pull {pull.Number} is ready to be submitted");
+                        }
                     }
                     else
                     {
-                        await SubmitToPerforce(token, repo, pull, checkRun, owner, reviewer);
+                        await SubmitToPerforce(token, repo, pull, checkRun, owner, reviewer, retries);
                         didSync = true;
                     }
                 }
                 catch (Exception e)
                 {
-                    await UpdateCheckRunError(e, token, repo, checkRun.Id, Stage.Validate);
+                    await UpdateCheckRunError(e, token, repo, pull.Number, checkRun.Id, Stage.Validate);
                     Logger.Error(e);
                 }
             }
@@ -204,43 +240,71 @@ namespace GitP4Sync.Services
             return (hasChanges, !didSync);
         }
 
-        private async Task SubmitToPerforce(InstallationToken token, string repo, PullRequest pull, CheckRun checkRun,  User owner, User reviewer)
+        private async Task SubmitToPerforce(InstallationToken token, string repo, PullRequest pull, CheckRun checkRun,
+            User owner, User reviewer, int? retries)
         {
-            var pullTitle = $"{pull.Title} | Reviewed by {reviewer.P4Login}";
-            var userAutoSubmit = owner.AutoSubmit ?? _settings.AutoSubmitDefault;
-            var cmd = $"P4Submit commit {pull.Head.Sha} {pull.Base.Ref} {owner.P4Login} '{pullTitle}' {(userAutoSubmit && _settings.AutoSubmitEnabled?'n':'y')} {_settings.P4DeleteShelveDays}";
-            var result = await _script.Execute(cmd);
-            var changeList = result[0].BaseObject;
-            if (userAutoSubmit && _settings.AutoSubmitEnabled)
+            if (retries >= _settings.Retries) return;
+            try
             {
-                checkRun.Conclusion = CheckRun.RunConclusion.Success;
-                var summary = $"{SubmitMsg}; changelist '{changeList}'";
-                await _client.UpdateCheckRun(token, repo, checkRun.Id, CheckRun.RunStatus.Completed,
-                    CheckRun.RunConclusion.Success,
-                    new CheckRunOutput {Title = SubmitMsg, Summary = summary});
-                Logger.Info(summary);
+                var pullTitle = $"{pull.Title} | Reviewed by {reviewer.P4Login}";
+                var userAutoSubmit = owner.AutoSubmit ?? _settings.AutoSubmitDefault;
+                var cmd = $"P4Submit commit {pull.Head.Sha} {pull.Base.Ref} {owner.P4Login} '{pullTitle}' {(userAutoSubmit && _settings.AutoSubmitEnabled?'n':'y')} {_settings.P4DeleteShelveDays}";
+                var result = await _script.Execute(cmd);
+                var changeList = result[0].BaseObject;
+                if (userAutoSubmit && _settings.AutoSubmitEnabled)
+                {
+                    checkRun.Conclusion = CheckRun.RunConclusion.Success;
+                    var summary = $"{Messages.SubmitMsg}; changelist '{changeList}'";
+                    await _client.UpdateCheckRun(token, repo, checkRun.Id, CheckRun.RunStatus.Completed,
+                        CheckRun.RunConclusion.Success,
+                        new CheckRunOutput {Title = Messages.SubmitMsg, Summary = summary});
+                    Logger.Info(summary);
+                }
+                else
+                {
+                    checkRun.Conclusion = CheckRun.RunConclusion.ActionRequired;
+                    var summary = userAutoSubmit
+                        ? $"AutoSubmit is disabled, {Messages.ShelveMsg} changelist '{changeList}' "
+                        : $"{Messages.ShelveMsg} changelist '{changeList}', Contact administrator to enable AutoSubmit for your account";
+                    await _client.UpdateCheckRun(token, repo, checkRun.Id, CheckRun.RunStatus.InProgress,
+                        CheckRun.RunConclusion.ActionRequired,
+                        new CheckRunOutput {Title = $"{Messages.ShelveMsg} '{changeList}'", Summary = summary});
+                    Logger.Info(summary);
+                }
+
+                await _client.ClosePullRequest(token, repo, pull.Number);
+                Logger.Info($"Closed pull request {pull.Number}");
             }
-            else
+            catch (Exception e)
             {
-                checkRun.Conclusion = CheckRun.RunConclusion.ActionRequired;
-                var summary = userAutoSubmit
-                    ? $"AutoSubmit is disabled, {ShelveMsg} changelist '{changeList}' "
-                    : $"{ShelveMsg} changelist '{changeList}', Contact administrator to enable AutoSubmit for your account";
-                await _client.UpdateCheckRun(token, repo, checkRun.Id, CheckRun.RunStatus.InProgress,
-                    CheckRun.RunConclusion.ActionRequired,
-                    new CheckRunOutput {Title = $"{ShelveMsg} '{changeList}'", Summary = summary});
-                Logger.Info(summary);
+                //First try would have null retries, when updating it should be 0, hence using -1
+                var updatedRetries = (retries ?? -1) + 1;
+                var showSubmit = _actionsRepo.Enabled && updatedRetries == _settings.Retries;
+                await UpdateCheckRunError(e, token, repo, pull.Number, checkRun.Id, Stage.Submit, updatedRetries, showSubmit);
+                Logger.Error(e);
             }
-            await _client.ClosePullRequest(token, repo, pull.Number);
-            Logger.Info($"Closed pull request {pull.Number}");
         }
 
-        private async Task UpdateCheckRunError(Exception e, InstallationToken token, string repo, long checkRunId, Stage stage, int? retries = null)
+        private Action GetSubmitAction(long pullNumber)
         {
+            return new Action
+            {
+                Label = "Submit to Perforce", Identifier = pullNumber.ToString(),
+                Description = "Submit changes and close pull request"
+            };
+        }
+
+        private async Task UpdateCheckRunError(Exception e, InstallationToken token, string repo, long pullNumber,
+            long checkRunId, Stage stage, int? retries = null, bool showSubmitButton = false)
+        {
+            var actions = showSubmitButton ? new List<Action> {GetSubmitAction(pullNumber)} : null;
             var retryStr = retries == null ? null : $"[retry {retries} out of {_settings.Retries}]";
             await _client.UpdateCheckRun(token, repo, checkRunId, CheckRun.RunStatus.InProgress,
                 CheckRun.RunConclusion.ActionRequired,
-                new CheckRunOutput {Title = $"Unexpected {stage} error'", Summary = $"Error during '{stage}' {retryStr}\r\n{e.Message}"});
+                new CheckRunOutput
+                {
+                    Title = $"Unexpected {stage} error'", Summary = $"Error during '{stage}' {retryStr}\r\n{e.Message}"
+                }, null, actions);
         }
 
         private async Task<string> ValidatePull(InstallationToken token, string repo, DetailedPullRequest pull,
@@ -329,7 +393,7 @@ namespace GitP4Sync.Services
                         run.Conclusion == CheckRun.RunConclusion.ActionRequired && 
                         //Only return a null if not submitting to skip an open pull request
                         !submit &&
-                        (run.Output.Title.StartsWith(ShelveMsg) || run.Output.Title.StartsWith(SubmitReadyMsg)))
+                        (run.Output.Title.StartsWith(Messages.ShelveMsg) || run.Output.Title.StartsWith(Messages.SubmitReadyMsg)))
                     {
                         Logger.Info(
                             $"Skipping pull Id '{pull}' - CheckRun status '{run.Status}' conclusion '{run.Conclusion}' ActionTitle '{run.Output.Title}'");
@@ -359,7 +423,7 @@ namespace GitP4Sync.Services
             return userExists ? _userRepo.Add(githubLogin, p4User, githubUser.Name) : null;
         }
 
-        private async Task<bool> Sync()
+        public async Task<bool> Sync()
         {
             bool? hadChanges = null;
             try

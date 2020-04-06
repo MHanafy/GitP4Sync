@@ -5,14 +5,21 @@ using User = MHanafy.GithubClient.Models.Github.User;
 
 namespace GitP4Sync.Repos
 {
-    /// <inheritdoc />
-    internal class GithubAzureAction : IGithubAction
+
+    public interface IGithubAzureAction : IGithubAction
     {
-        public readonly CloudQueueMessage Message;
+        CloudQueueMessage Message { get; }
+    }
+
+    /// <inheritdoc />
+    public class GithubAzureAction : IGithubAzureAction
+    {
+        public CloudQueueMessage Message => _message;
+        private readonly CloudQueueMessage _message;
 
         public GithubAzureAction(CloudQueueMessage msg, GithubAction action)
         {
-            Message = msg;
+            _message = msg;
             Action = action.Action;
             CheckRun = action.CheckRun;
             Repository = action.Repository;
@@ -27,5 +34,6 @@ namespace GitP4Sync.Repos
         public Repository Repository { get; }
         public User Sender { get; }
         public Installation Installation { get; }
+
     }
 }

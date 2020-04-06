@@ -17,24 +17,25 @@
                         CopyFile $fileName $localFileName
                         $log = P4 add -c $changelist "$localFileName" 2>&1
                         if($LastExitCode -ne 0) {throw "P4: failed to add '$fileName'`r`n$log"}
+                        if($log){ Write-Host $log}
                     } 
                 'D'{ 
                         $log = p4 sync -f "$localFileName" 
                         if($LastExitCode -ne 0) {throw "P4: failed to sync '$fileName'`r`n$log"}
                         $log = P4 delete -c $changelist "$localFileName" 2>&1
                         if($LastExitCode -ne 0) {throw "P4: failed to delete '$fileName'`r`n$log"}
+                        if($log){ Write-Host $log}
                     }
                 'M'{ 
                         $log = p4 sync -f "$localFileName"
                         if($LastExitCode -ne 0) {throw "P4: failed to sync '$fileName'`r`n$log"}
-                        $output = p4 edit -c $changelist "$localFileName" 2>&1
-                        if($LastExitCode -ne 0 -or -not ($output -match "opened for edit")) 
+                        $log = p4 edit -c $changelist $localFileName 2>&1
+                        if($LastExitCode -ne 0 -or -not ($log -match "opened for edit")) 
                         {
                             throw "P4: failed to checkout file '$fileName'`r`n$output"
                         }
+                        if($log){ Write-Host $log}
                         CopyFile $fileName $localFileName
-                        $log = P4 edit -c $changelist "$localFileName" 2>&1
-                        if($LastExitCode -ne 0) {throw "P4: failed to edit '$fileName'`r`n$log"}
                     }
                 Default  {throw "Git: Invalid file state $_.State"}
 		    }

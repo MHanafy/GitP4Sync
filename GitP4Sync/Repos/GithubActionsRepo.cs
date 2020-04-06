@@ -8,7 +8,7 @@ using Newtonsoft.Json;
 
 namespace GitP4Sync.Repos
 {
-    internal class GithubActionsAzureRepo : IGithubActionsRepo<GithubAzureAction>
+    internal class GithubActionsAzureRepo : IGithubActionsRepo<IGithubAzureAction>
     {
         public bool Enabled { get; }
         private readonly TimeSpan _coolingTime;
@@ -31,7 +31,7 @@ namespace GitP4Sync.Repos
         /// Returns a single request, or null if no requests found
         /// </summary>
         /// <returns></returns>
-        public async Task<GithubAzureAction> GetAction()
+        public async Task<IGithubAzureAction> GetAction()
         {
             if(!Enabled) throw new InvalidOperationException(NotEnabled);
             var message = await _queue.GetMessageAsync(_coolingTime, _client.DefaultRequestOptions, null);
@@ -44,7 +44,7 @@ namespace GitP4Sync.Repos
         /// Permanently Deletes an action
         /// </summary>
         /// <returns></returns>
-        public async Task DeleteAction(GithubAzureAction action)
+        public async Task DeleteAction(IGithubAzureAction action)
         {
             if(!Enabled) throw new InvalidOperationException(NotEnabled);
             await _queue.DeleteMessageAsync(action.Message);
@@ -54,7 +54,7 @@ namespace GitP4Sync.Repos
         /// Saves the action back to the queue, so it shows up again after the default cooling period.
         /// </summary>
         /// <returns></returns>
-        public async Task ReturnAction(GithubAzureAction action)
+        public async Task ReturnAction(IGithubAzureAction action)
         {
             if(!Enabled) throw new InvalidOperationException(NotEnabled);
             await _queue.UpdateMessageAsync(action.Message, TimeSpan.Zero , MessageUpdateFields.Visibility);

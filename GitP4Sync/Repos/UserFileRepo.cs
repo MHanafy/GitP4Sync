@@ -6,7 +6,7 @@ using Newtonsoft.Json;
 
 namespace GitP4Sync.Repos
 {
-    class UserFileRepo
+    public class UserFileRepo : IUserRepo
     {
         private readonly FileSystemWatcher _watcher;
         private static readonly NLog.Logger Logger = NLog.LogManager.GetCurrentClassLogger();

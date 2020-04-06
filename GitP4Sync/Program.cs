@@ -63,12 +63,12 @@ namespace GitP4Sync
                 .Configure<GithubSettings>(config.GetSection("GithubSettings"))
                 .Configure<GithubActionsSettings>(config.GetSection("GithubActionsSettings"))
                 .AddScoped<IJwtTokenFactory, GithubJwtTokenFactory>()
-                .AddScoped<GithubHttpClient>()
-                .AddScoped<UserFileRepo>()
+                .AddScoped<IGithubClient, GithubHttpClient>()
+                .AddScoped<IUserRepo, UserFileRepo>()
                 .AddScoped<IScheduler, Scheduler>()
-                .AddScoped<ScriptService>()
+                .AddScoped<IScriptService, ScriptService>()
                 .AddScoped<GitP4SyncService>()
-                .AddScoped<IGithubActionsRepo<GithubAzureAction>, GithubActionsAzureRepo>()
+                .AddScoped<IGithubActionsRepo<IGithubAzureAction>, GithubActionsAzureRepo>()
                 .BuildServiceProvider();
 
             return serviceProvider;
