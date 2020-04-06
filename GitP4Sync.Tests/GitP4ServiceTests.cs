@@ -36,6 +36,20 @@ namespace GitP4Sync.Tests
             _actionsRepo = Substitute.For<IGithubActionsRepo<IGithubAzureAction>>();
         }
 
+        private IGithubAzureAction MockAction()
+        {
+            var checkRun = Substitute.For<CheckRun>();
+            checkRun.Output.Returns(new Output() { Text = "", Title = "" });
+            var action = Substitute.For<IGithubAzureAction>();
+            action.CheckRun.Returns(checkRun);
+            action.CheckRun.Output.Returns(new Output());
+            action.CheckRun.Output.Title.Returns(GitP4SyncService.Messages.SubmitReadyMsg);
+            action.Action.Returns(GithubAction.ActionName.Requested);
+            action.RequestedAction.Id.Returns("10");
+            return action;
+        }
+
+
         [TestMethod]
         public async Task ProcessPullRequests_ActionsEnabledSubmitError_UpdatesRetryCount()
         {
@@ -45,10 +59,7 @@ namespace GitP4Sync.Tests
 
             var service = new GitP4SyncService(_scheduler, _client, _scriptService, _settings, _githubSettings, _userRepo,
                 _actionsRepo);
-            var action = Substitute.For<IGithubAzureAction>();
-            action.Action.Returns(GithubAction.ActionName.Requested);
-            action.CheckRun.Output.Title.Returns(GitP4SyncService.Messages.SubmitReadyMsg);
-            action.RequestedAction.Id.Returns("10");
+            var action = MockAction();
 
             //Act
             await service.ProcessAction(token, repo, action);
