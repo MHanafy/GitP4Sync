@@ -3,7 +3,7 @@ using System.Collections.Generic;
 
 namespace GitP4Sync.Models
 {
-    class Settings
+    public class Settings
     {
         public string Scripts { get; set; }
         public string WorkDir { get; set; }
