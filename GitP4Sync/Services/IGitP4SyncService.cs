@@ -4,13 +4,11 @@ using MHanafy.GithubClient.Models;
 
 namespace GitP4Sync.Services
 {
-    public interface IGitP4SyncService<T>
+    public interface IGitP4SyncService<in T>
     {
         Task Start();
         void Stop();
-        Task<(bool hasChanges, bool needsSync)> ProcessSubmitActions(InstallationToken token, string repo);
         Task<bool> ProcessAction(InstallationToken token, string repo, IKeyedGithubAction<T> action);
-        Task<(bool hasChanges, bool needsSync)> ProcessPullRequests(InstallationToken token, string repo);
         Task<bool> Sync();
     }
 }
