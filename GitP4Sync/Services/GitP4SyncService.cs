@@ -9,7 +9,6 @@ using MHanafy.GithubClient;
 using MHanafy.GithubClient.Models;
 using MHanafy.GithubClient.Models.Github;
 using MHanafy.Scheduling;
-using Microsoft.Azure.Storage.Queue;
 using Microsoft.Extensions.Options;
 using NLog;
 using Action = MHanafy.GithubClient.Models.Github.Action;
@@ -17,13 +16,9 @@ using User = GitP4Sync.Models.User;
 
 namespace GitP4Sync.Services
 {
-
-
     public abstract class GitP4SyncService<T> : IGitP4SyncService<T>
     {
         protected abstract Logger Logger { get; }
-        //private static readonly NLog.Logger Logger = NLog.LogManager.GetCurrentClassLogger();
-
         private readonly IScheduler _scheduler;
         private readonly IGithubClient _client;
         private readonly IScriptService _script;
@@ -93,7 +88,7 @@ namespace GitP4Sync.Services
         }
 
 
-        public async Task<(bool hasChanges, bool needsSync)> ProcessSubmitActions(InstallationToken token, string repo)
+        private async Task<(bool hasChanges, bool needsSync)> ProcessSubmitActions(InstallationToken token, string repo)
         {
             if (!_actionsRepo.Enabled) return (false, true);
             var didSync = false;
@@ -163,7 +158,7 @@ namespace GitP4Sync.Services
             return match.Success ? (int?)int.Parse(match.Groups[1].Value) : null;
         }
 
-        public async Task<(bool hasChanges, bool needsSync)> ProcessPullRequests(InstallationToken token, string repo)
+        private async Task<(bool hasChanges, bool needsSync)> ProcessPullRequests(InstallationToken token, string repo)
         {
             var didSync = false;
             var hasChanges = false;
