@@ -8,14 +8,15 @@ using Newtonsoft.Json;
 
 namespace GitP4Sync.Repos
 {
-    internal class GithubActionsAzureRepo : IGithubActionsRepo<IGithubAzureAction>
+    internal class GithubActionsAzureRepo : IGithubActionsRepo<IKeyedGithubAction<CloudQueueMessage>, CloudQueueMessage>
     {
         public bool Enabled { get; }
         private readonly TimeSpan _coolingTime;
         private readonly CloudQueue _queue;
         private readonly CloudQueueClient _client;
         private const string NotEnabled = "Github actions aren't enabled";
-        
+        private static readonly NLog.Logger Logger = NLog.LogManager.GetCurrentClassLogger();
+
         public GithubActionsAzureRepo(IOptions<GithubActionsSettings> options)
         {
             Enabled = options.Value.Enabled;
@@ -31,38 +32,53 @@ namespace GitP4Sync.Repos
         /// Returns a single request, or null if no requests found
         /// </summary>
         /// <returns></returns>
-        public async Task<IGithubAzureAction> GetAction()
+        public async Task<IKeyedGithubAction<CloudQueueMessage>> GetAction()
         {
             if(!Enabled) throw new InvalidOperationException(NotEnabled);
-            var message = await _queue.GetMessageAsync(_coolingTime, _client.DefaultRequestOptions, null);
-            if (message == null) return null;
-            var action = JsonConvert.DeserializeObject<GithubAction>(message.AsString);
-            return new GithubAzureAction(message, action);
+            while (true)
+            {
+                var message = await _queue.GetMessageAsync(_coolingTime, _client.DefaultRequestOptions, null);
+                if (message == null) return null;
+                var action = JsonConvert.DeserializeObject<Github.GithubAction>(message.AsString);
+                if (action.Action != Github.GithubAction.ActionName.Requested)
+                {
+                    Logger.Info(
+                        $"skipping submit request; action: '{action.Action}' pull '{action.RequestedAction?.Id}' by '{action.Sender?.Login}'");
+
+                    await _queue.DeleteMessageAsync(message);
+                    continue;
+                }
+
+                if (action.CheckRun == null || !action.CheckRun.Output.Title.StartsWith(Messages.SubmitReadyMsg) ||
+                    !long.TryParse(action.RequestedAction.Id, out var pullNumber))
+                {
+                    Logger.Error(
+                        $"Invalid submit request; action: '{action.Action}' pull '{action.RequestedAction?.Id}' by '{action.Sender?.Login}'");
+                    await _queue.DeleteMessageAsync(message);
+                    continue;
+                }
+                return new GithubAzureAction(message, pullNumber, action.Sender.Login);
+            }
         }
 
         /// <summary>
         /// Permanently Deletes an action
         /// </summary>
         /// <returns></returns>
-        public async Task DeleteAction(IGithubAzureAction action)
+        public async Task DeleteAction(CloudQueueMessage action)
         {
             if(!Enabled) throw new InvalidOperationException(NotEnabled);
-            await _queue.DeleteMessageAsync(action.Message);
+            await _queue.DeleteMessageAsync(action);
         }
 
         /// <summary>
         /// Saves the action back to the queue, so it shows up again after the default cooling period.
         /// </summary>
         /// <returns></returns>
-        public async Task ReturnAction(IGithubAzureAction action)
+        public async Task ReturnAction(CloudQueueMessage action)
         {
             if(!Enabled) throw new InvalidOperationException(NotEnabled);
-            await _queue.UpdateMessageAsync(action.Message, TimeSpan.Zero , MessageUpdateFields.Visibility);
+            await _queue.UpdateMessageAsync(action, TimeSpan.Zero , MessageUpdateFields.Visibility);
         }
-
     }
-
-
-
-
 }
