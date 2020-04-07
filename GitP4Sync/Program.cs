@@ -5,6 +5,7 @@ using GitP4Sync.Services;
 using MHanafy.GithubClient;
 using MHanafy.GithubClient.Models;
 using MHanafy.Scheduling;
+using Microsoft.Azure.Storage.Queue;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Topshelf;
@@ -19,7 +20,7 @@ namespace GitP4Sync
         {
             var rc = HostFactory.Run(x =>
             {
-                x.Service<GitP4SyncService>(
+                x.Service<IGitP4SyncAzureService>(
                     s =>
                     {
                         s.ConstructUsing(name =>
@@ -27,7 +28,7 @@ namespace GitP4Sync
                             try
                             {
                                 var serviceProvider = SetupDi();
-                                return serviceProvider.GetService<GitP4SyncService>();
+                                return serviceProvider.GetService<IGitP4SyncAzureService>();
                             }
                             catch (Exception e)
                             {
@@ -67,8 +68,8 @@ namespace GitP4Sync
                 .AddScoped<IUserRepo, UserFileRepo>()
                 .AddScoped<IScheduler, Scheduler>()
                 .AddScoped<IScriptService, ScriptService>()
-                .AddScoped<GitP4SyncService>()
-                .AddScoped<IGithubActionsRepo<IGithubAzureAction>, GithubActionsAzureRepo>()
+                .AddScoped<IGitP4SyncAzureService, GitP4SyncAzureService>()
+                .AddScoped<IGithubActionsRepo<IKeyedGithubAction<CloudQueueMessage>, CloudQueueMessage>, GithubActionsAzureRepo>()
                 .BuildServiceProvider();
 
             return serviceProvider;

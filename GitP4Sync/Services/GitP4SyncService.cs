@@ -9,15 +9,20 @@ using MHanafy.GithubClient;
 using MHanafy.GithubClient.Models;
 using MHanafy.GithubClient.Models.Github;
 using MHanafy.Scheduling;
+using Microsoft.Azure.Storage.Queue;
 using Microsoft.Extensions.Options;
+using NLog;
 using Action = MHanafy.GithubClient.Models.Github.Action;
 using User = GitP4Sync.Models.User;
 
 namespace GitP4Sync.Services
 {
-    public class GitP4SyncService
+
+
+    public abstract class GitP4SyncService<T> : IGitP4SyncService<T>
     {
-        private static readonly NLog.Logger Logger = NLog.LogManager.GetCurrentClassLogger();
+        protected abstract Logger Logger { get; }
+        //private static readonly NLog.Logger Logger = NLog.LogManager.GetCurrentClassLogger();
 
         private readonly IScheduler _scheduler;
         private readonly IGithubClient _client;
@@ -25,7 +30,7 @@ namespace GitP4Sync.Services
         private readonly Settings _settings;
         private readonly GithubSettings _githubSettings;
         private readonly IUserRepo _userRepo;
-        private readonly IGithubActionsRepo<IGithubAzureAction> _actionsRepo;
+        private readonly IGithubActionsRepo<IKeyedGithubAction<T>,T> _actionsRepo;
 
         private enum Stage
         {
@@ -33,8 +38,8 @@ namespace GitP4Sync.Services
             Submit
         }
 
-        public GitP4SyncService(IScheduler scheduler, IGithubClient client, IScriptService script,
-            IOptions<Settings> settings, IOptions<GithubSettings> githubSettings, IUserRepo userRepo, IGithubActionsRepo<IGithubAzureAction> repo)
+        protected GitP4SyncService(IScheduler scheduler, IGithubClient client, IScriptService script,
+            IOptions<Settings> settings, IOptions<GithubSettings> githubSettings, IUserRepo userRepo, IGithubActionsRepo<IKeyedGithubAction<T>,T> repo)
         {
             _scheduler = scheduler;
             _client = client;
@@ -43,11 +48,11 @@ namespace GitP4Sync.Services
             _githubSettings = githubSettings.Value;
             _userRepo = userRepo;
             _actionsRepo = repo;
-            Logger.Info($"Service settings: {settings.Value}");
         }
 
         public async Task Start()
         {
+            Logger.Info($"Service settings: {_settings}");
             await _script.Init();
             await _script.Execute($"$Env:P4Client = '{_settings.P4Client}'");
             _scheduler.Start(async () => await Process());
@@ -87,13 +92,6 @@ namespace GitP4Sync.Services
             }
         }
 
-        public static class Messages
-        {
-            public const string ShelveMsg = "Changes were shelved to";
-            public const string SubmitReadyMsg = "Ready to submit, Click submit to continue";
-            public const string SubmitMsg = "Changes were submitted to Perforce";
-        }
-
 
         public async Task<(bool hasChanges, bool needsSync)> ProcessSubmitActions(InstallationToken token, string repo)
         {
@@ -122,28 +120,12 @@ namespace GitP4Sync.Services
             return (hasChanges, !didSync);
         }
 
-        public async Task<bool> ProcessAction(InstallationToken token, string repo, IGithubAzureAction action)
+        public async Task<bool> ProcessAction(InstallationToken token, string repo, IKeyedGithubAction<T> action)
         {
-            if (action.Action != GithubAction.ActionName.Requested)
-            {
-                Logger.Info(
-                    $"skipping submit request; action: '{action.Action}' pull '{action.RequestedAction?.Id}' by '{action.Sender?.Login}'");
-                await _actionsRepo.DeleteAction(action);
-                return false;
-            }
 
-            if (action.CheckRun == null || !action.CheckRun.Output.Title.StartsWith(Messages.SubmitReadyMsg) ||
-                !long.TryParse(action.RequestedAction.Id, out var pullNumber))
-            {
-                Logger.Error(
-                    $"Invalid submit request; action: '{action.Action}' pull '{action.RequestedAction?.Id}' by '{action.Sender?.Login}'");
-                await _actionsRepo.DeleteAction(action);
-                return false;
-            }
+            Logger.Info($"Started submitting pull {action.PullNumber} by {action.SenderLogin}");
 
-            Logger.Info($"Started submitting pull {action.RequestedAction.Id} by {action.Sender.Login}");
-
-            var pull = await _client.GetPullRequest(token, repo, pullNumber);
+            var pull = await _client.GetPullRequest(token, repo, action.PullNumber);
             var checkRun = await GetCheckRun(token, repo, pull.Id, pull.Head.Sha, true);
             try
             {
@@ -168,7 +150,7 @@ namespace GitP4Sync.Services
             finally
             {
                 //Always delete the request, because we'll tell the user about it and they can click to retry if desired.
-                await _actionsRepo.DeleteAction(action);
+                await _actionsRepo.DeleteAction(action.Id);
             }
         }
 
@@ -379,7 +361,6 @@ namespace GitP4Sync.Services
         private async Task<CheckRun> GetCheckRun(InstallationToken token, string repo, long pull, string sha, bool submit)
         {
             //Check to see if there's a previously created CheckRun
-
             var checkSuites = await _client.GetCheckSuites(token, repo, sha);
             var checkSuite = checkSuites.FirstOrDefault(x => x.LatestCheckRunsCount > 0);
             if (checkSuite != null)

@@ -1,49 +1,36 @@
-﻿using MHanafy.GithubClient.Models.Github;
-using Newtonsoft.Json;
-
+﻿
 namespace GitP4Sync.Models
 {
-    public class RequestedAction
-    {
-        [JsonProperty("identifier")]
-        public string Id { get; set; }
-    }
+
     public interface IGithubAction
     {
-        string Action { get;  }
-        RequestedAction RequestedAction { get; }
-        CheckRun CheckRun { get;  }
-        Repository Repository { get;  }
-        MHanafy.GithubClient.Models.Github.User Sender { get; }
-        Installation Installation { get;  }
+        long PullNumber { get; }
+        string SenderLogin { get; }
+
+    }
+    public class GithubAction
+    {
+        public long PullNumber { get; }
+        public string SenderLogin { get; }
+
+        public GithubAction(long pullNumber, string senderLogin)
+        {
+            PullNumber = pullNumber;
+            SenderLogin = senderLogin;
+        }
     }
 
-    public class GithubAction : IGithubAction
+    public interface IKeyedGithubAction<out TKey> : IGithubAction
     {
-        public static class ActionName
+        TKey Id { get; }
+    }
+
+    public class GithubActionBase<TKey> : GithubAction, IKeyedGithubAction<TKey>
+    {
+        public TKey Id { get; }
+        public GithubActionBase(TKey id, long pullNumber, string senderLogin) : base(pullNumber, senderLogin)
         {
-            public const string Created = "created";
-            public const string Completed = "completed";
-            public const string ReRequested = "rerequested";
-            public const string Requested = "requested_action";
+            Id = id;
         }
-
-        [JsonProperty("action")]
-        public string Action { get; set; }
-
-        [JsonProperty("requested_action")]
-        public RequestedAction RequestedAction { get; set; }
-
-        [JsonProperty("check_run")]
-        public CheckRun CheckRun { get; set; }
-
-        [JsonProperty("repository")]
-        public Repository Repository { get; set; }
-
-        [JsonProperty("sender")]
-        public MHanafy.GithubClient.Models.Github.User Sender { get; set; }
-
-        [JsonProperty("installation")]
-        public Installation Installation { get; set; }
     }
 }
