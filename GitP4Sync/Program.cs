@@ -69,6 +69,7 @@ namespace GitP4Sync
                 .AddScoped<IScheduler, Scheduler>()
                 .AddScoped<IScriptService, ScriptService>()
                 .AddScoped<IGitP4SyncAzureService, GitP4SyncAzureService>()
+                .AddScoped<IGithubService, GithubService>()
                 .AddScoped<IGithubActionsRepo<IKeyedGithubAction<CloudQueueMessage>, CloudQueueMessage>, GithubActionsAzureRepo>()
                 .BuildServiceProvider();
 

@@ -166,7 +166,7 @@ namespace GitP4Sync.Services
         {
             return status.Status == SubmitStatus.InProgress || status.Status == SubmitStatus.MergeConflict ||
                    status.Status == SubmitStatus.ReviewRequired || status.Status == SubmitStatus.UnmappedUsers ||
-                   status.Status == SubmitStatus.SubmitReady || status.Status == SubmitStatus.SubmitRetry ||
+                   status.Status == SubmitStatus.SubmitRetry ||
                    status.Status == SubmitStatus.Error && status.Retries.GetValueOrDefault(0) < _settings.Retries;
         }
 
