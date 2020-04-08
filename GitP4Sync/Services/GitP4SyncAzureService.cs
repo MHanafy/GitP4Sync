@@ -1,7 +1,6 @@
 ﻿using GitP4Sync.Models;
 using GitP4Sync.Repos;
 using MHanafy.GithubClient;
-using MHanafy.GithubClient.Models;
 using MHanafy.Scheduling;
 using Microsoft.Azure.Storage.Queue;
 using Microsoft.Extensions.Options;
@@ -17,9 +16,10 @@ namespace GitP4Sync.Services
     public class GitP4SyncAzureService : GitP4SyncService<CloudQueueMessage>, IGitP4SyncAzureService
     {
         public GitP4SyncAzureService(IScheduler scheduler, IGithubClient client, IScriptService script,
-            IOptions<Settings> settings, IOptions<GithubSettings> githubSettings, IUserRepo userRepo,
-            IGithubActionsRepo<IKeyedGithubAction<CloudQueueMessage>, CloudQueueMessage> repo, GithubService githubService) : base(scheduler, client,
-            script, settings, githubSettings, userRepo, repo, githubService)
+            IOptions<Settings> settings, IUserRepo userRepo,
+            IGithubActionsRepo<IKeyedGithubAction<CloudQueueMessage>, CloudQueueMessage> repo,
+            IGithubService githubService) : base(scheduler, client,
+            script, settings, userRepo, repo, githubService)
         {
         }
 
