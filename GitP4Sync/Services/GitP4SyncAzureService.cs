@@ -18,8 +18,8 @@ namespace GitP4Sync.Services
     {
         public GitP4SyncAzureService(IScheduler scheduler, IGithubClient client, IScriptService script,
             IOptions<Settings> settings, IOptions<GithubSettings> githubSettings, IUserRepo userRepo,
-            IGithubActionsRepo<IKeyedGithubAction<CloudQueueMessage>, CloudQueueMessage> repo) : base(scheduler, client,
-            script, settings, githubSettings, userRepo, repo)
+            IGithubActionsRepo<IKeyedGithubAction<CloudQueueMessage>, CloudQueueMessage> repo, GithubService githubService) : base(scheduler, client,
+            script, settings, githubSettings, userRepo, repo, githubService)
         {
         }
 

@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
 using GitP4Sync.Github;
 using GitP4Sync.Models;
@@ -10,8 +11,10 @@ using MHanafy.GithubClient.Models;
 using MHanafy.GithubClient.Models.Github;
 using MHanafy.Scheduling;
 using Microsoft.Extensions.Options;
+using Microsoft.VisualStudio.TestPlatform.ObjectModel;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NSubstitute;
+using Action = System.Action;
 using User = GitP4Sync.Models.User;
 
 namespace GitP4Sync.Tests
@@ -43,6 +46,9 @@ namespace GitP4Sync.Tests
             _userRepo = Substitute.For<IUserRepo>();
             _actionsRepo = Substitute.For<IGithubActionsRepo<IKeyedGithubAction<int>, int>>();
         }
+
+
+
 
         [TestMethod]
         public async Task ProcessAction_SubmitError_UpdatesRetryCount()
