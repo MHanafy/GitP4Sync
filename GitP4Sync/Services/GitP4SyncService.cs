@@ -12,6 +12,7 @@ using MHanafy.Scheduling;
 using Microsoft.Extensions.Options;
 using NLog;
 using Action = MHanafy.GithubClient.Models.Github.Action;
+using PullRequest = GitP4Sync.Models.PullRequest;
 using User = GitP4Sync.Models.User;
 
 namespace GitP4Sync.Services
@@ -26,6 +27,7 @@ namespace GitP4Sync.Services
         private readonly GithubSettings _githubSettings;
         private readonly IUserRepo _userRepo;
         private readonly IGithubActionsRepo<IKeyedGithubAction<T>,T> _actionsRepo;
+        private readonly GithubService _githubService;
 
         private enum Stage
         {
@@ -34,7 +36,7 @@ namespace GitP4Sync.Services
         }
 
         protected GitP4SyncService(IScheduler scheduler, IGithubClient client, IScriptService script,
-            IOptions<Settings> settings, IOptions<GithubSettings> githubSettings, IUserRepo userRepo, IGithubActionsRepo<IKeyedGithubAction<T>,T> repo)
+            IOptions<Settings> settings, IOptions<GithubSettings> githubSettings, IUserRepo userRepo, IGithubActionsRepo<IKeyedGithubAction<T>,T> repo, GithubService githubService)
         {
             _scheduler = scheduler;
             _client = client;
@@ -43,6 +45,7 @@ namespace GitP4Sync.Services
             _githubSettings = githubSettings.Value;
             _userRepo = userRepo;
             _actionsRepo = repo;
+            _githubService = githubService;
         }
 
         public async Task Start()
@@ -64,7 +67,7 @@ namespace GitP4Sync.Services
             {
                 var origin = await _script.Execute("GitGetRemote");
                 var repo = (string) origin[0].Properties["Repository"].Value;
-                var token = await _client.GetInstallationToken(_settings.GithubInstallationId);
+                var token = await _githubService.GetToken(_settings.GithubInstallationId);
                 //Set the login for shell authentication
                 await _script.Execute($"GitSetToken {token.Token}");
 
@@ -117,28 +120,31 @@ namespace GitP4Sync.Services
 
         public async Task<bool> ProcessAction(InstallationToken token, string repo, IKeyedGithubAction<T> action)
         {
-
             Logger.Info($"Started submitting pull {action.PullNumber} by {action.SenderLogin}");
+           
+            var pull = await _githubService.GetPullRequest(token, repo, action.PullNumber);
+            if (!pull.Open) return false;
+            var status = await _githubService.GetPullStatus(token, repo, pull.HeadSha);
+            if (status.Status != SubmitStatus.SubmitReady) return false;
 
-            var pull = await _client.GetPullRequest(token, repo, action.PullNumber);
-            var checkRun = await GetCheckRun(token, repo, pull.Id, pull.Head.Sha, true);
             try
             {
-                var reviewerLogin = await ValidatePull(token, repo, pull, checkRun);
-                var (owner, reviewer) = await GetUsers(token, repo, pull, checkRun, reviewerLogin);
-                if (owner == null || reviewer == null || pull.State != "open")
+                var (valid, reviewerLogin) = await _githubService.ValidatePull(token, repo, pull, status);
+                if (!valid) return false;
+                var (owner, reviewer) = await GetUsers(token, repo, pull, status, reviewerLogin);
+                if (owner == null || reviewer == null || !pull.Open)
                 {
                     //Ignore the request if conditions changed, or if the pull request was closed
                     return false;
                 }
 
                 //When processing a user submit request, always reset the retries counter to start over
-                await SubmitToPerforce(token, repo, pull, checkRun, owner, reviewer, null);
+                //await SubmitToPerforce(token, repo, pull, status, owner, reviewer, null);
                 return true;
             }
             catch (Exception e)
             {
-                await UpdateCheckRunError(e, token, repo, pull.Number, checkRun.Id, Stage.Submit);
+                await UpdateCheckRunError(e, token, repo, pull.Number, status.Id, Stage.Submit);
                 Logger.Error(e);
                 return true;
             }
@@ -163,35 +169,36 @@ namespace GitP4Sync.Services
             var didSync = false;
             var hasChanges = false;
          
-            var pulls = (await _client.GetPullRequests(token, repo))
-                .Where(x => _settings.Branches.Contains(x.Base.Ref) && x.State == PullRequest.PullStatus.Open);
+            var pulls = (await _githubService.GetPullRequests(token, repo))
+                .Where(x => _settings.Branches.Contains(x.BaseRef) && x.Open);
 
             foreach (var pull in pulls)
             {
-                Logger.Info($"Started processing pull {pull.Number} by {pull.User.Login}");
-                var checkRun = await GetCheckRun(token, repo, pull.Id, pull.Head.Sha, false);
-                if (checkRun == null) continue;
+                Logger.Info($"Started processing pull {pull.Number} by {pull.UserLogin}");
+                var status = await _githubService.GetPullStatus(token, repo, pull.HeadSha);
+                if (!status.ActionRequired) continue;
                 hasChanges = true;
                 try
                 {
-                    var pullDetails = await _client.GetPullRequest(token, repo, pull.Number);
-                    var reviewerLogin = await ValidatePull(token, repo, pullDetails, checkRun);
-                    var (owner, reviewer) = await GetUsers(token, repo, pull, checkRun, reviewerLogin);
+                    //var pullDetails = await _client.GetPullRequest(token, repo, pull.Number);
+                    var (valid, reviewerLogin) = await _githubService.ValidatePull(token, repo, pull, status);
+                    if (!valid) continue;
+                    var (owner, reviewer) = await GetUsers(token, repo, pull, status, reviewerLogin);
                     if (owner == null || reviewer == null) continue;
 
-                    var retries = GetSubmitRetries(checkRun);
+                    var retries = 1;// GetSubmitRetries(status);
                     if (_actionsRepo.Enabled)
                     {
                         if (retries != null)
                         {
                             //retrying, submit instead of showing the submit button
-                            await SubmitToPerforce(token, repo, pull, checkRun, owner, reviewer, retries);
+                            //await SubmitToPerforce(token, repo, pull, status, owner, reviewer, retries);
                             didSync = true;
                         }
                         else
                         {
                             var actions = new List<Action> {GetSubmitAction(pull.Number)};
-                            await _client.UpdateCheckRun(token, repo, checkRun.Id, CheckRun.RunStatus.InProgress,
+                            await _client.UpdateCheckRun(token, repo, status.Id, CheckRun.RunStatus.InProgress,
                                 CheckRun.RunConclusion.ActionRequired,
                                 new CheckRunOutput
                                 {
@@ -203,13 +210,13 @@ namespace GitP4Sync.Services
                     }
                     else
                     {
-                        await SubmitToPerforce(token, repo, pull, checkRun, owner, reviewer, retries);
+                        //await SubmitToPerforce(token, repo, pull, status, owner, reviewer, retries);
                         didSync = true;
                     }
                 }
                 catch (Exception e)
                 {
-                    await UpdateCheckRunError(e, token, repo, pull.Number, checkRun.Id, Stage.Validate);
+                    await UpdateCheckRunError(e, token, repo, pull.Number, status.Id, Stage.Validate);
                     Logger.Error(e);
                 }
             }
@@ -225,7 +232,7 @@ namespace GitP4Sync.Services
             {
                 var pullTitle = $"{pull.Title} | Reviewed by {reviewer.P4Login}";
                 var userAutoSubmit = owner.AutoSubmit ?? _settings.AutoSubmitDefault;
-                var cmd = $"P4Submit commit {pull.Head.Sha} {pull.Base.Ref} {owner.P4Login} '{pullTitle}' {(userAutoSubmit && _settings.AutoSubmitEnabled?'n':'y')} {_settings.P4DeleteShelveDays}";
+                var cmd = $"P4Submit commit {pull.HeadSha} {pull.BaseRef} {owner.P4Login} '{pullTitle}' {(userAutoSubmit && _settings.AutoSubmitEnabled?'n':'y')} {_settings.P4DeleteShelveDays}";
                 var result = await _script.Execute(cmd);
                 var changeList = result[0].BaseObject;
                 if (userAutoSubmit && _settings.AutoSubmitEnabled)
@@ -284,40 +291,9 @@ namespace GitP4Sync.Services
                 }, null, actions);
         }
 
-        private async Task<string> ValidatePull(InstallationToken token, string repo, DetailedPullRequest pull,
-            CheckRun checkRun)
+        private async Task<(User Owner, User Reviewer)> GetUsers(InstallationToken token, string repo, PullRequest pull, PullStatus checkRun, string reviewerLogin)
         {
-
-            if (pull.Mergeable == null)
-            {
-                Logger.Info(
-                    $"Null mergable flag Skipping pull '{pull.Number}' - CheckRun status '{checkRun.Status}' conclusion '{checkRun.Conclusion}' ActionTitle '{checkRun.Output.Title}'");
-                return null;
-            }
-
-            if (!pull.Mergeable.Value)
-            {
-                checkRun.Conclusion = CheckRun.RunConclusion.ActionRequired;
-                var summary =
-                    "Pull request can't be merged automatically, Please merge manually and update the branch to proceed";
-                await _client.UpdateCheckRun(token, repo, checkRun.Id, CheckRun.RunStatus.InProgress,
-                    CheckRun.RunConclusion.ActionRequired,
-                    new CheckRunOutput
-                        {Title = "Merge conflict - automatic merge not possible", Summary = summary});
-                Logger.Info(summary);
-                return null;
-            }
-
-            var review =
-                (await _client.GetReviews(token, repo, pull.Number)).FirstOrDefault(x =>
-                    x.State == Review.ReviewState.Approved);
-
-            return review?.User.Login;
-        }
-
-        private async Task<(User Owner, User Reviewer)> GetUsers(InstallationToken token, string repo, PullRequest pull, CheckRun checkRun, string reviewerLogin)
-        {
-            var user = await GetUser(token, pull.User.Login);
+            var user = await GetUser(token, pull.UserLogin);
             var reviewer = reviewerLogin == null ? null : await GetUser(token, reviewerLogin);
             if (reviewerLogin == null)
             {
@@ -326,65 +302,25 @@ namespace GitP4Sync.Services
                     Logger.Warn($"Skipping code review requirement for {user.GithubLogin} as configured in users.json");
                     reviewer = user;
                 } else
-                {            
-                    checkRun.Conclusion = CheckRun.RunConclusion.ActionRequired;
-                    var reviewRequired = "An approved code review is required before changes can be submitted to Perforce";
-                    await _client.UpdateCheckRun(token, repo, checkRun.Id, CheckRun.RunStatus.InProgress,
-                        CheckRun.RunConclusion.ActionRequired,
-                        new CheckRunOutput
-                            {Title = "Code review required", Summary = reviewRequired});
-                    Logger.Info(reviewRequired);
+                {
+                    await _githubService.UpdatePullStatus(token, repo, checkRun.Id, SubmitStatus.ReviewRequired);
                 }
             }
             if (user != null && (reviewerLogin == null || reviewer != null)) return (user, reviewer);
 
-            checkRun.Conclusion = CheckRun.RunConclusion.ActionRequired;
-            var userStr = user == null ? $"'{pull.User.Login}'" : null;
+            //checkRun.Conclusion = CheckRun.RunConclusion.ActionRequired;
+            var userStr = user == null ? $"'{pull.UserLogin}'" : null;
             var reviewerStr = reviewerLogin !=null && reviewer == null ? $"'{reviewerLogin}'" : null;
             var unmappedUsers =
                 $"User{(userStr != null && reviewerStr != null ? "(s)" : null)} {userStr}{(userStr != null && reviewerStr != null ? " and " : null)}{reviewerStr}";
             var summary =
                 $"Github {unmappedUsers} {(userStr!=null && reviewerStr!=null?"aren't":"isn't")} mapped and couldn't be mapped automatically; Please update users file to continue";
-            await _client.UpdateCheckRun(token, pull.Head.Repo.Name, checkRun.Id, CheckRun.RunStatus.InProgress,
+            await _client.UpdateCheckRun(token, repo, checkRun.Id, CheckRun.RunStatus.InProgress,
                 CheckRun.RunConclusion.ActionRequired,
                 new CheckRunOutput {Title = $"Unmapped {unmappedUsers}", Summary = summary});
             Logger.Info(summary);
             return (user, reviewer);
 
-        }
-
-        private async Task<CheckRun> GetCheckRun(InstallationToken token, string repo, long pull, string sha, bool submit)
-        {
-            //Check to see if there's a previously created CheckRun
-            var checkSuites = await _client.GetCheckSuites(token, repo, sha);
-            var checkSuite = checkSuites.FirstOrDefault(x => x.LatestCheckRunsCount > 0);
-            if (checkSuite != null)
-            {
-                var checkRuns = await _client.GetCheckRuns(token, repo, checkSuite.Id);
-                var run = checkRuns.FirstOrDefault(x => x.App.Id == _githubSettings.ApplicationId);
-                if (run != null)
-                {
-                    if (run.Status == CheckRun.RunStatus.Completed &&
-                        run.Conclusion == CheckRun.RunConclusion.Success ||
-                        run.Conclusion == CheckRun.RunConclusion.ActionRequired && 
-                        //Only return a null if not submitting to skip an open pull request
-                        !submit &&
-                        (run.Output.Title.StartsWith(Messages.ShelveMsg) || run.Output.Title.StartsWith(Messages.SubmitReadyMsg)))
-                    {
-                        Logger.Info(
-                            $"Skipping pull Id '{pull}' - CheckRun status '{run.Status}' conclusion '{run.Conclusion}' ActionTitle '{run.Output.Title}'");
-                        return null;
-                    }
-
-                    return run;
-                }
-            }
-
-            var checkRun = new CheckRun("P4 Submit", sha, CheckRun.RunStatus.InProgress)
-            {
-                StartedAt = DateTime.UtcNow
-            };
-            return await _client.SubmitCheckRun(token, repo, checkRun);
         }
 
         private async Task<User> GetUser(InstallationToken token, string githubLogin)
