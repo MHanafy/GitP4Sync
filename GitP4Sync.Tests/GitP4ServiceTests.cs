@@ -1,8 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Threading.Tasks;
-using GitP4Sync.Github;
 using GitP4Sync.Models;
 using GitP4Sync.Repos;
 using GitP4Sync.Services;
@@ -11,10 +9,8 @@ using MHanafy.GithubClient.Models;
 using MHanafy.GithubClient.Models.Github;
 using MHanafy.Scheduling;
 using Microsoft.Extensions.Options;
-using Microsoft.VisualStudio.TestPlatform.ObjectModel;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NSubstitute;
-using Action = System.Action;
 using User = GitP4Sync.Models.User;
 
 namespace GitP4Sync.Tests
@@ -69,7 +65,7 @@ namespace GitP4Sync.Tests
             var checkSuites = new List<CheckSuite> {checkSuite};
             _client.GetCheckSuites(Arg.Any<InstallationToken>(), repo, Arg.Any<string>())
                 .Returns(checkSuites);
-            var checkRun = new CheckRun("", "", "") {Output = new Output {Text = "", Title = Messages.SubmitReadyMsg}, App =  Substitute.For<App>()};
+            var checkRun = new CheckRun("", "", "") {Output = new Output {Text = "", Title = GithubService.Messages.SubmitReadyMsg}, App =  Substitute.For<App>()};
             _client.GetCheckRuns(Arg.Any<InstallationToken>(), repo, Arg.Any<long>())
                 .Returns(new List<CheckRun> {checkRun});
             var user = Substitute.For<User>();
