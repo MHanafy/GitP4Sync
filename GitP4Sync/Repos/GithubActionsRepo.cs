@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Threading.Tasks;
 using GitP4Sync.Models;
+using GitP4Sync.Services;
 using Microsoft.Azure.Storage;
 using Microsoft.Azure.Storage.Queue;
 using Microsoft.Extensions.Options;
@@ -49,7 +50,7 @@ namespace GitP4Sync.Repos
                     continue;
                 }
 
-                if (action.CheckRun == null || !action.CheckRun.Output.Title.StartsWith(Messages.SubmitReadyMsg) ||
+                if (action.CheckRun == null || !action.CheckRun.Output.Title.StartsWith(GithubService.Messages.SubmitReadyMsg) ||
                     !long.TryParse(action.RequestedAction.Id, out var pullNumber))
                 {
                     Logger.Error(
