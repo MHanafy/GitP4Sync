@@ -9,6 +9,7 @@ namespace GitP4Sync.Services
         Task Start();
         void Stop();
         Task<bool> ProcessAction(InstallationToken token, string repo, IKeyedGithubAction<T> action);
+        Task<bool> ProcessPullRequest(InstallationToken token, string repo, IPullRequest pull);
         Task<bool> Sync();
     }
 }

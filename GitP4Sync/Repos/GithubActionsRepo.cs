@@ -9,7 +9,8 @@ using Newtonsoft.Json;
 
 namespace GitP4Sync.Repos
 {
-    internal class GithubActionsAzureRepo : IGithubActionsRepo<IKeyedGithubAction<CloudQueueMessage>, CloudQueueMessage>
+    public interface IGithubActionsAzureRepo : IGithubActionsRepo<IKeyedGithubAction<CloudQueueMessage>, CloudQueueMessage>{}
+    public class GithubActionsAzureRepo : IGithubActionsAzureRepo
     {
         public bool Enabled { get; }
         private readonly TimeSpan _coolingTime;

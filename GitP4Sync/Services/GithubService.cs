@@ -209,7 +209,17 @@ namespace GitP4Sync.Services
             await _client.UpdateCheckRun(token, repo, status.Id, runStatus, conclusion, output, DateTime.UtcNow, actions);
             Logger.Info($"Status updated - {conclusion} {output?.Summary}");
         }
-        
+
+        public async Task ClosePullRequest(InstallationToken token, string repo, long number)
+        {
+            await _client.ClosePullRequest(token, repo, number);
+        }
+
+        public async Task<DetailedUser> GetUser(InstallationToken token, string login)
+        {
+            return await _client.GetUser(token, login);
+        }
+
         /// <summary>
         /// Returns the processing status of a pull request, would automatically set status to InProgress for unprocessed pulls
         /// </summary>
