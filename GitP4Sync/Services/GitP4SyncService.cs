@@ -4,12 +4,10 @@ using System.Linq;
 using System.Threading.Tasks;
 using GitP4Sync.Models;
 using GitP4Sync.Repos;
-using MHanafy.GithubClient;
 using MHanafy.GithubClient.Models;
 using MHanafy.Scheduling;
 using Microsoft.Extensions.Options;
 using NLog;
-using User = GitP4Sync.Models.User;
 
 namespace GitP4Sync.Services
 {
@@ -17,18 +15,16 @@ namespace GitP4Sync.Services
     {
         protected abstract Logger Logger { get; }
         private readonly IScheduler _scheduler;
-        private readonly IGithubClient _client;
         private readonly IScriptService _script;
         private readonly Settings _settings;
         private readonly IUserRepo _userRepo;
         private readonly IGithubActionsRepo<IKeyedGithubAction<T>,T> _actionsRepo;
         private readonly IGithubService _githubService;
 
-        protected GitP4SyncService(IScheduler scheduler, IGithubClient client, IScriptService script,
+        protected GitP4SyncService(IScheduler scheduler, IScriptService script,
             IOptions<Settings> settings, IUserRepo userRepo, IGithubActionsRepo<IKeyedGithubAction<T>,T> repo, IGithubService githubService)
         {
             _scheduler = scheduler;
-            _client = client;
             _script = script;
             _settings = settings.Value;
             _userRepo = userRepo;
@@ -157,7 +153,7 @@ namespace GitP4Sync.Services
             //First try would have null retries, when updating it should be 0, hence using -1
             var updatedRetries = (status.Retries ?? -1) + 1;
             var showSubmit = _actionsRepo.Enabled && updatedRetries == _settings.Retries;
-            await _githubService.UpdatePullStatus(token, repo, status, e, showSubmit, status.Retries, _settings.Retries);
+            await _githubService.UpdatePullStatus(token, repo, status, e, showSubmit, updatedRetries, _settings.Retries);
             Logger.Error(e);
 
         }
@@ -244,7 +240,7 @@ namespace GitP4Sync.Services
                     await _githubService.UpdatePullStatus(token, repo, status.Id, changeList, false, userAutoSubmit);
                 }
 
-                await _client.ClosePullRequest(token, repo, pull.Number);
+                await _githubService.ClosePullRequest(token, repo, pull.Number);
                 Logger.Info($"Closed pull request {pull.Number}");
             }
             catch (Exception e)
@@ -283,7 +279,7 @@ namespace GitP4Sync.Services
             var user = _userRepo.Get(githubLogin);
             if (user != null) return user;
             //Try identifying the user based on his name
-            var githubUser = await _client.GetUser(token, githubLogin);
+            var githubUser = await _githubService.GetUser(token, githubLogin);
             if (githubUser.Name == null) return null;
             var p4User = githubUser.Name.Replace(" ", ".");
             var userExists = (bool) (await _script.Execute($"P4UserExists {p4User}"))[0].BaseObject;

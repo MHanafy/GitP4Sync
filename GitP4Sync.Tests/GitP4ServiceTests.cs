@@ -4,13 +4,13 @@ using System.Threading.Tasks;
 using GitP4Sync.Models;
 using GitP4Sync.Repos;
 using GitP4Sync.Services;
-using MHanafy.GithubClient;
 using MHanafy.GithubClient.Models;
-using MHanafy.GithubClient.Models.Github;
 using MHanafy.Scheduling;
+using Microsoft.Azure.Storage.Queue;
 using Microsoft.Extensions.Options;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NSubstitute;
+using NSubstitute.ExceptionExtensions;
 using User = GitP4Sync.Models.User;
 
 namespace GitP4Sync.Tests
@@ -19,66 +19,98 @@ namespace GitP4Sync.Tests
     public class GitP4ServiceTests
     {
         private IScheduler _scheduler;
-        private IGithubClient _client;
         private IScriptService _scriptService;
         private IOptions<Settings> _settings;
-        private IOptions<GithubSettings> _githubSettings;
         private IUserRepo _userRepo;
-        private IGithubActionsRepo<IKeyedGithubAction<int>, int> _actionsRepo;
+        private IGithubActionsAzureRepo _actionsRepo;
+        private IGithubService _githubService;
+        private const string Repo = "repo";
+        private InstallationToken _token;
+        private User _user;
 
         [TestInitialize]
         public void Init()
         {
             _scheduler = Substitute.For<IScheduler>();
-            _client = Substitute.For<IGithubClient>();
             _scriptService = Substitute.For<IScriptService>();
             _settings = Substitute.For<IOptions<Settings>>();
             var settings = Substitute.For<Settings>();
-            settings.Retries = 3;
             settings.Branches = new HashSet<string>{"master"};
             _settings.Value.Returns(settings);
-            _githubSettings = Substitute.For<IOptions<GithubSettings>>();
-            _githubSettings.Value.Returns(Substitute.For<GithubSettings>());
             _userRepo = Substitute.For<IUserRepo>();
-            _actionsRepo = Substitute.For<IGithubActionsRepo<IKeyedGithubAction<int>, int>>();
+            _actionsRepo = Substitute.For<IGithubActionsAzureRepo>();
+            _githubService = Substitute.For<IGithubService>(); 
+            _token = new InstallationToken(0,"","",DateTime.Now.AddHours(1));
+            _user = Substitute.For<User>();
+            _userRepo.Get(Arg.Any<string>()).Returns(_user);
         }
-
-
-
 
         [TestMethod]
         public async Task ProcessAction_SubmitError_UpdatesRetryCount()
         {
             //Arrange
-            var repo = "";
-            var token = new InstallationToken(0,"","",DateTime.Now.AddHours(1));
-            var pull = Substitute.For<DetailedPullRequest>();
-            var head = Substitute.For<Base>();
-            head.Sha = "";
-            pull.Head = head;
-            pull.User = new MHanafy.GithubClient.Models.Github.User {Login = ""};
-            pull.State = "open";
-            _client.GetPullRequest(Arg.Any<InstallationToken>(), repo, Arg.Any<long>()).Returns(pull);
-            var checkSuite = Substitute.For<CheckSuite>();
-            checkSuite.LatestCheckRunsCount = 1;
-            checkSuite.Id = 1;
-            var checkSuites = new List<CheckSuite> {checkSuite};
-            _client.GetCheckSuites(Arg.Any<InstallationToken>(), repo, Arg.Any<string>())
-                .Returns(checkSuites);
-            var checkRun = new CheckRun("", "", "") {Output = new Output {Text = "", Title = GithubService.Messages.SubmitReadyMsg}, App =  Substitute.For<App>()};
-            _client.GetCheckRuns(Arg.Any<InstallationToken>(), repo, Arg.Any<long>())
-                .Returns(new List<CheckRun> {checkRun});
-            var user = Substitute.For<User>();
-            user.RequireCodeReview = false;
-            _userRepo.Get(Arg.Any<string>()).Returns(user);
-
-            //var service = new GitP4SyncService<int>(_scheduler, _client, _scriptService, _settings, _githubSettings, _userRepo,_actionsRepo);
-            //var action = MockAction();
+            _user.RequireCodeReview = false;
+            var action = Substitute.For<IKeyedGithubAction<CloudQueueMessage>>();
+            _settings.Value.Retries = 2;
+            var status = Substitute.For<IPullStatus>();
+            status.Status.Returns(SubmitStatus.SubmitReady);
+            var pull = Substitute.For<IPullRequest>();
+            pull.Open.Returns(true);
+            _githubService.GetPullStatus(_token, Repo, pull).Returns(status);
+            _githubService.GetPullRequest(_token, Repo, Arg.Any<long>()).Returns(pull);
+            _githubService.ValidatePull(_token, Repo, pull, status).Returns((true,null));
+            var ex = new InvalidOperationException(Guid.NewGuid().ToString());
+            _scriptService.Execute(Arg.Is<string>(x => x.StartsWith("P4Submit")), Arg.Any<bool>())
+                .Throws(ex);
+            var service = new GitP4SyncAzureService(_scheduler, _scriptService, _settings, _userRepo, _actionsRepo,
+                _githubService);
 
             //Act
-            //await service.ProcessAction(token, repo, action);
+            await service.ProcessAction(_token, Repo, action);
 
             //Assert
+            await _githubService.Received().UpdatePullStatus(_token, Repo, status, ex, false, 0, _settings.Value.Retries);
+        }
+
+        [TestMethod]
+        [DataRow(0, 1)]
+        [DataRow(1, 2)]
+        [DataRow(2, 2)]
+        public async Task ProcessPullRequest_SubmitError_UpdatesRetryCount(int? initialRetry, int? expectedRetry)
+        {
+            //Arrange
+            _user.RequireCodeReview = false;
+            _actionsRepo.Enabled.Returns(true);
+            _settings.Value.Retries = 2;
+            var status = Substitute.For<IPullStatus>();
+            status.Retries.Returns(initialRetry);
+            status.Status.Returns(initialRetry == null ? SubmitStatus.SubmitReady : SubmitStatus.SubmitRetry);
+            var pull = Substitute.For<IPullRequest>();
+            pull.Open.Returns(true);
+            _githubService.GetPullStatus(_token, Repo, pull).Returns(status);
+            _githubService.GetPullRequest(_token, Repo, Arg.Any<long>()).Returns(pull);
+            _githubService.ValidatePull(_token, Repo, pull, status).Returns((true,null));
+            var ex = new InvalidOperationException(Guid.NewGuid().ToString());
+            _scriptService.Execute(Arg.Is<string>(x => x.StartsWith("P4Submit")), Arg.Any<bool>())
+                .Throws(ex);
+            var service = new GitP4SyncAzureService(_scheduler, _scriptService, _settings, _userRepo, _actionsRepo,
+                _githubService);
+
+            //Act
+            await service.ProcessPullRequest(_token, Repo, pull);
+
+            //Assert
+            var showSubmit = initialRetry == _settings.Value.Retries - 1;
+            if (initialRetry == expectedRetry)
+            {
+                await _githubService.DidNotReceiveWithAnyArgs().UpdatePullStatus(_token, Repo, status, ex, showSubmit,
+                    expectedRetry, _settings.Value.Retries);
+            }
+            else
+            {
+                await _githubService.Received().UpdatePullStatus(_token, Repo, status, ex, showSubmit, expectedRetry,
+                    _settings.Value.Retries);
+            }
         }
     }
 }

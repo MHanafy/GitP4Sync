@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Threading.Tasks;
 using GitP4Sync.Models;
 using MHanafy.GithubClient.Models;
+using MHanafy.GithubClient.Models.Github;
 
 namespace GitP4Sync.Services
 {
@@ -17,6 +18,8 @@ namespace GitP4Sync.Services
         Task UpdatePullStatus(InstallationToken token, string repo, IPullStatus status, Exception ex, bool showSubmit, int? retries, int maxRetries);
         Task UpdatePullStatus(InstallationToken token, string repo, long statusId, string changeList, bool submitted, bool userAutoSubmit);
         Task UpdatePullStatus(InstallationToken token, string repo, IPullStatus status, SubmitStatus submitStatus);
+        Task ClosePullRequest(InstallationToken token, string repo, long number);
+        Task<DetailedUser> GetUser(InstallationToken token, string login);
 
         /// <summary>
         /// Returns the processing status of a pull request, would automatically set status to InProgress for unprocessed pulls

@@ -1,6 +1,6 @@
 ﻿namespace GitP4Sync.Repos
 {
-    internal class GithubActionsSettings
+    public class GithubActionsSettings
     {
         public bool Enabled { get; set; }
         public string QueueConnectionString { get; set; }
