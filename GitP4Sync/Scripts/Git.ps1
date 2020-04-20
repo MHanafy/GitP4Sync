@@ -50,10 +50,10 @@ function GitSetToken($token){
 
 function GitGetChanges($baseBranch, $branch =''){
     if($branch -eq ''){
-        $data = git diff $baseBranch --name-status
+        $data = git diff $baseBranch --name-status --no-renames
     }
     else{
-        $data = git diff $baseBranch $branch --name-status
+        $data = git diff $baseBranch $branch --name-status --no-renames
     }
     
     $result = New-Object System.Collections.Generic.List[PSCustomObject]
