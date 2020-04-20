@@ -110,14 +110,14 @@ namespace GitP4Sync.Services
             if (!pull.Open)
             {
                 Logger.Warn($"Ignoring a submit request for closed pull {pull.Number}");
+                await _actionsRepo.DeleteAction(action.Id);
                 return false;
             }
 
             var status = await _githubService.GetPullStatus(token, repo, pull);
-            if (status.Status != SubmitStatus.SubmitReady)
+            if (status.Status != SubmitStatus.SubmitReady && status.Status != SubmitStatus.Error)
             {
-                Logger.Warn($"Ignoring a submit request for pull {pull.Number} - status: {status}");
-                return false;
+                Logger.Warn($"Unexpected submit request for pull {pull.Number} - status: {status.Status}");
             }
 
             try
@@ -160,10 +160,12 @@ namespace GitP4Sync.Services
 
         private bool ActionRequired(IPullStatus status)
         {
-            return status.Status == SubmitStatus.InProgress || status.Status == SubmitStatus.MergeConflict ||
+            var result = status.Status == SubmitStatus.InProgress || status.Status == SubmitStatus.MergeConflict ||
                    status.Status == SubmitStatus.ReviewRequired || status.Status == SubmitStatus.UnmappedUsers ||
                    status.Status == SubmitStatus.SubmitRetry ||
                    status.Status == SubmitStatus.Error && status.Retries.GetValueOrDefault(0) < _settings.Retries;
+            if(!result) Logger.Info($"No action required - state: {status.Status}");
+            return result;
         }
 
         private async Task<(bool hasChanges, bool needsSync)> ProcessPullRequests(InstallationToken token, string repo)
@@ -228,7 +230,7 @@ namespace GitP4Sync.Services
             {
                 var pullTitle = $"{pull.Title} | Reviewed by {reviewer.P4Login}";
                 var userAutoSubmit = owner.AutoSubmit ?? _settings.AutoSubmitDefault;
-                var cmd = $"P4Submit commit {pull.HeadSha} {pull.BaseRef} {owner.P4Login} '{pullTitle}' {(userAutoSubmit && _settings.AutoSubmitEnabled?'n':'y')} {_settings.P4DeleteShelveDays}";
+                var cmd = $"P4Submit commit {pull.HeadSha} {pull.BaseRef} {_settings.P4User} {owner.P4Login} '{pullTitle}' {(userAutoSubmit && _settings.AutoSubmitEnabled?'n':'y')} {_settings.P4DeleteShelveDays}";
                 var result = await _script.Execute(cmd);
                 var changeList = result[0].BaseObject.ToString();
                 if (userAutoSubmit && _settings.AutoSubmitEnabled)
@@ -262,6 +264,7 @@ namespace GitP4Sync.Services
                 } else
                 {
                     await _githubService.UpdatePullStatus(token, repo, status, SubmitStatus.ReviewRequired);
+                    Logger.Info("Code review required");
                 }
             }
             if (user != null && (reviewerLogin == null || reviewer != null)) return (user, reviewer);
@@ -296,7 +299,7 @@ namespace GitP4Sync.Services
                     var upToDate = false;
                     while (!upToDate)
                     {
-                        var result = await _script.Execute($"GitP4Sync {branch} {_settings.P4MaxChanges}");
+                        var result = await _script.Execute($"GitP4Sync {_settings.P4User} {branch} {_settings.P4MaxChanges}");
                         upToDate = (bool) result[0].Properties["UpToDate"].Value;
                         //see if the first call had changes
                         if (hadChanges == null) hadChanges = !upToDate;

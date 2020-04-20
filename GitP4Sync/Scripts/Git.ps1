@@ -108,8 +108,9 @@ function GitGetRemote(){
     }
 }
 
-function GitP4Sync($branch, $maxChanges = 10){
-    Write-Host "P4 client: '$Env:P4Client'"
+function GitP4Sync($svcUser, $branch, $maxChanges = 10){
+    $Env:P4User = $svcUser
+    Write-Host "P4 User: $svcUser client: '$Env:P4Client'"
     $log = git p4 sync --branch $branch --max-changes $maxChanges
 	if($LastExitCode -ne 0) {throw "Git: failed to do P4 sync: " + $log}
 	$upToDate = $log -Contains "No changes to import!"
