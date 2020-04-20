@@ -1,7 +1,6 @@
 ﻿using System;
 using System.Threading.Tasks;
 using GitP4Sync.Models;
-using GitP4Sync.Services;
 using Microsoft.Azure.Storage;
 using Microsoft.Azure.Storage.Queue;
 using Microsoft.Extensions.Options;
@@ -51,8 +50,7 @@ namespace GitP4Sync.Repos
                     continue;
                 }
 
-                if (action.CheckRun == null || !action.CheckRun.Output.Title.StartsWith(GithubService.Messages.SubmitReadyMsg) ||
-                    !long.TryParse(action.RequestedAction.Id, out var pullNumber))
+                if (action.CheckRun == null || !long.TryParse(action.RequestedAction.Id, out var pullNumber))
                 {
                     Logger.Error(
                         $"Invalid submit request; action: '{action.Action}' pull '{action.RequestedAction?.Id}' by '{action.Sender?.Login}'");

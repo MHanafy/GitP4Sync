@@ -65,11 +65,11 @@ function P4GetLocalFileName($depotFileName){
     ([regex]::Matches($log, $exp))[0].Groups[1].Value
 }
 
-function P4Submit($type, $id, $branch, $user, $desc, $shelve = 'y', $deleteShelveDays = 10){
+function P4Submit($type, $id, $branch, $svcUser, $user, $desc, $shelve = 'y', $deleteShelveDays = 10){
     if($type -ne 'branch' -and $type -ne 'commit'){throw "Git: invalid parameter value for type: '$type' has be be one of ['commit', 'branch']" }
     Write-Host "P4: Starting P4Submit - $type '$id' User '$user' Desc '$desc' P4 client: '$Env:P4Client'"
 
-    P4ClearAll $deleteShelveDays
+    P4ClearAll $svcUser $deleteShelveDays
     $syncResult = GitP4Sync $branch 1000 #force to sync all changes, typically shouldn't have more than a few if any due to continuous sync
     if(-not $syncResult.UpToDate){throw "P4: Coudn't sync all changes"}
 
@@ -77,8 +77,8 @@ function P4Submit($type, $id, $branch, $user, $desc, $shelve = 'y', $deleteShelv
     $depot = $syncResult.DepotPath
 
     $sBranch = GitFetchMerge $type $id $branch
-    $Env:P4User = $user
     $changes = GitGetChanges $branch $sBranch
+    P4Login $svcUser $user
     $changelist = P4Checkout $changes $depot $desc
     $log = p4 changes -m 1 -s submitted "$depot..."
     if($LastExitCode -ne 0) {throw "P4: failed to get submitted changes"}
@@ -107,9 +107,15 @@ function P4Submit($type, $id, $branch, $user, $desc, $shelve = 'y', $deleteShelv
     $changelist
 }
 
-function P4DeleteChange($changelist, $user = '', $deleteShelved = ''){
-    if($user){$Env:P4User = $user}
-    if($deleteShelved){
+function P4Login($svcUser, $user){
+    $Env:P4User = $svcUser
+    $log = p4 login $user
+    if($LastExitCode -ne 0) {throw "P4: failed to login by '$svcUser' on behalf of '$user'`r`n$log"}
+    $Env:P4User = $user
+}
+
+function P4DeleteChange($changelist, $deleteShelved = ''){
+    if($deleteShelved -eq 'y'){
         $output = p4 shelve -d -c $changelist 2>&1
         if($LastExitCode -ne 0) {Write-Host "P4: failed to delete shelved files`r`n$output"}
     }
@@ -121,7 +127,7 @@ function P4DeleteChange($changelist, $user = '', $deleteShelved = ''){
     else {Write-Host "P4: failed to delete change list '$changelist'`r`n$output"}
 }
 
-function P4ClearAll($deleteShelveDays){
+function P4ClearAll($svcUser, $deleteShelveDays){
     $workspace = $Env:P4Client
     Write-Host "P4: Started Deleting all change lists in workspace $workspace"
     $data = p4 changes -c $workspace -s pending
@@ -139,8 +145,11 @@ function P4ClearAll($deleteShelveDays){
         if($change.Date -lt (Get-Date).AddDays(-1 * $deleteShelveDays)){
             Write-Host "P4: Deleting shelved files for $change"
             $deleteShelved = 'y'
-        }
-        P4DeleteChange $change.Number $change.User $deleteShelved
+        } else{
+            $deleteShelved = 'n'
+		}
+        P4Login $svcUser $change.User
+        P4DeleteChange $change.Number $deleteShelved
     }
     Write-Host "P4: Finished Deleting all change lists"
 }

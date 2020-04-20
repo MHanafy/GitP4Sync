@@ -5,7 +5,6 @@ using GitP4Sync.Services;
 using MHanafy.GithubClient;
 using MHanafy.GithubClient.Models;
 using MHanafy.Scheduling;
-using Microsoft.Azure.Storage.Queue;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Topshelf;
@@ -70,7 +69,7 @@ namespace GitP4Sync
                 .AddScoped<IScriptService, ScriptService>()
                 .AddScoped<IGitP4SyncAzureService, GitP4SyncAzureService>()
                 .AddScoped<IGithubService, GithubService>()
-                .AddScoped<IGithubActionsRepo<IKeyedGithubAction<CloudQueueMessage>, CloudQueueMessage>, GithubActionsAzureRepo>()
+                .AddScoped<IGithubActionsAzureRepo, GithubActionsAzureRepo>()
                 .BuildServiceProvider();
 
             return serviceProvider;

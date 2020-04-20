@@ -286,6 +286,9 @@ namespace GitP4Sync.Services
                 case Messages.SubmitRetry:
                     status = SubmitStatus.SubmitRetry;
                     break;
+                case Messages.UnmappedUsers:
+                    status = SubmitStatus.UnmappedUsers;
+                    break;
                 default:
                     Logger.Info($"Unidentified submit status '{run.Output.Title}', assuming InProgress");
                     status = SubmitStatus.InProgress;
