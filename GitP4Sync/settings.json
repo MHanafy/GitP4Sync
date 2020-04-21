@@ -2,6 +2,7 @@
 	"WorkDir": "C:\\Temp\\clone2\\",
 	"P4Client": "GitSubmit",
 	"P4User": "P4GitServiceUser",
+	"P4Pass": "",
 	"Retries": "3",
 	"P4MaxChanges": "10",
 	"P4DeleteShelveDays": "10",

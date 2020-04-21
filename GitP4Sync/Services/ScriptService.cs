@@ -65,12 +65,12 @@ namespace GitP4Sync.Services
             _errIndex = e.Index;
         }
 
-        public async Task<PSDataCollection<PSObject>> Execute(string script, bool logResult = false)
+        public async Task<PSDataCollection<PSObject>> Execute(string script, bool logResult = false, string msg = null)
         {
             try
             {
                 Clear();
-                Logger.Info($"Executing {script}");
+                Logger.Info("Executing " + (msg ?? script));
                 _shell.AddScript(script);
                 var result = await _shell.InvokeAsync();
                 if(logResult) Logger.Info($"Script output: {string.Join("\r\n", result)}");
@@ -83,7 +83,7 @@ namespace GitP4Sync.Services
             }
             finally
             {
-                Logger.Info($"Finished executing {script}");
+                Logger.Info($"Finished executing " + (msg ?? script));
             }
         }
 

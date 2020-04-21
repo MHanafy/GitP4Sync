@@ -9,6 +9,7 @@ namespace GitP4Sync.Models
         public string WorkDir { get; set; }
         public string P4Client { get; set; }
         public string P4User { get; set; }
+        public string P4Pass { get; set; }
         public int Retries { get; set; } = 3;
         public int P4MaxChanges { get; set; } = 10;
         public int P4DeleteShelveDays { get; set; } = 10;

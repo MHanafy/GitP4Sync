@@ -78,7 +78,7 @@ function P4Submit($type, $id, $branch, $svcUser, $user, $desc, $shelve = 'y', $d
 
     $sBranch = GitFetchMerge $type $id $branch
     $changes = GitGetChanges $branch $sBranch
-    P4Login $svcUser $user
+    P4LoginFor $svcUser $user
     $changelist = P4Checkout $changes $depot $desc
     $log = p4 changes -m 1 -s submitted "$depot..."
     if($LastExitCode -ne 0) {throw "P4: failed to get submitted changes"}
@@ -107,7 +107,13 @@ function P4Submit($type, $id, $branch, $svcUser, $user, $desc, $shelve = 'y', $d
     $changelist
 }
 
-function P4Login($svcUser, $user){
+function P4Login($svcUser, $pass){
+    $Env:P4User = $svcUser
+    $log = $pass | p4 login
+    if($LastExitCode -ne 0) {throw "P4: failed to login by '$svcUser'`r`n$log"}
+}
+
+function P4LoginFor($svcUser, $user){
     $Env:P4User = $svcUser
     $log = p4 login $user
     if($LastExitCode -ne 0) {throw "P4: failed to login by '$svcUser' on behalf of '$user'`r`n$log"}
@@ -148,7 +154,7 @@ function P4ClearAll($svcUser, $deleteShelveDays){
         } else{
             $deleteShelved = 'n'
 		}
-        P4Login $svcUser $change.User
+        P4LoginFor $svcUser $change.User
         P4DeleteChange $change.Number $deleteShelved
     }
     Write-Host "P4: Finished Deleting all change lists"

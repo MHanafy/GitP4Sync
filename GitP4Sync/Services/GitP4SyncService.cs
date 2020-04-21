@@ -55,6 +55,9 @@ namespace GitP4Sync.Services
                 //Set the login for shell authentication
                 await _script.Execute($"GitSetToken {token.Token}");
 
+                //login to perforce
+                await _script.Execute($"P4Login '{_settings.P4User}' '{_settings.P4Pass}'",false, "Login to Perforce");
+
                 var (hasChanges, needsSync) = await ProcessSubmitActions(token, repo);
                 var (hasChanges2, needsSync2) = await ProcessPullRequests(token, repo);
 
