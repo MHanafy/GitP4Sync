@@ -70,7 +70,7 @@ function P4Submit($type, $id, $branch, $svcUser, $user, $desc, $shelve = 'y', $d
     Write-Host "P4: Starting P4Submit - $type '$id' User '$user' Desc '$desc' P4 client: '$Env:P4Client'"
 
     P4ClearAll $svcUser $deleteShelveDays
-    $syncResult = GitP4Sync $branch 1000 #force to sync all changes, typically shouldn't have more than a few if any due to continuous sync
+    $syncResult = GitP4Sync $svcUser $branch 1000 #force to sync all changes, typically shouldn't have more than a few if any due to continuous sync
     if(-not $syncResult.UpToDate){throw "P4: Coudn't sync all changes"}
 
     $lastChange = $syncResult.LastChange
