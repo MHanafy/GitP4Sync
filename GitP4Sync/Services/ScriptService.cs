@@ -73,7 +73,13 @@ namespace GitP4Sync.Services
                 Logger.Info("Executing " + (msg ?? script));
                 _shell.AddScript(script);
                 var result = await _shell.InvokeAsync();
-                if(logResult) Logger.Info($"Script output: {string.Join("\r\n", result)}");
+                if (logResult)
+                {
+                    var output = result == null
+                        ? "<Null>"
+                        : $"result count = {result.Count} result:\r\n{string.Join("\r\n", result)}";
+                    Logger.Info($"Script output: {output}");
+                }
                 return result;
             }
             catch (Exception e)

@@ -234,8 +234,9 @@ namespace GitP4Sync.Services
                 var pullTitle = $"{pull.Title} | Reviewed by {reviewer.P4Login}";
                 var userAutoSubmit = owner.AutoSubmit ?? _settings.AutoSubmitDefault;
                 var cmd = $"P4Submit commit {pull.HeadSha} {pull.BaseRef} {_settings.P4User} {owner.P4Login} '{pullTitle}' {(userAutoSubmit && _settings.AutoSubmitEnabled?'n':'y')} {_settings.P4DeleteShelveDays}";
-                var result = await _script.Execute(cmd);
-                var changeList = result[0].BaseObject.ToString();
+                var result = await _script.Execute(cmd, true);
+                //this is to workaround an issue where no value is returned from script execution If no error is thrown to indicate success.
+                var changeList = result?[0]?.BaseObject?.ToString()??"<Null>";
                 if (userAutoSubmit && _settings.AutoSubmitEnabled)
                 {
                     await _githubService.UpdatePullStatus(token, repo, status.Id, changeList, true, false);
