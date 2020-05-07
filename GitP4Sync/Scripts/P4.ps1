@@ -13,7 +13,7 @@
                         #try fetching the file in case a file with the same name was added by another P4 user
                         $log = p4 sync -f "$localFileName" 2>&1
                         if($LastExitCode -ne 0) {throw "P4: failed to sync '$fileName'`r`n$log"}
-                        if(-not ($log -match "no such file\(s\)")) {throw "P4: Same file name was added by another user '$localFileName'`r`n$log"}
+                        if(-not ($log -match "no such file\(s\)") -and -not($log -match "deleted as")) {throw "P4: Same file name was added by another user '$localFileName'`r`n$log"}
                         CopyFile $fileName $localFileName
                         $log = P4 add -c $changelist "$localFileName" 2>&1
                         if($LastExitCode -ne 0) {throw "P4: failed to add '$fileName'`r`n$log"}
