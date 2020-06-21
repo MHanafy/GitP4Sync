@@ -126,9 +126,9 @@ This is a list of the required settings, leave other settings to default values.
 |GitHubSettings.KeyPath|key.pem|location of the GitHub App Key, rename the file to match it and place it under the application folder *|
 |GitHubSettings.ApplicationId|1234|The GitHub App ID *|
 
-\* Review the [Creating the GitHub App](#creating-the-GitHub-app) section  
+\* Review the [Creating the GitHub App](#b-creating-the-GitHub-app) section  
 ** Only migrated branches can be listed here.  
-*** Review the [Setting up the worker machine](#setting-up-the-worker-machine) section 
+*** Review the [Setting up the worker machine](#d-setting-up-the-worker-machine) section 
 
 ### I. Logging configuration
 For simplicity, the service uses a separate file for logging configuration; the default configuration keeps one log per day for 10 days.  
