@@ -26,6 +26,8 @@ namespace GitP4Sync.Repos
             _coolingTime = TimeSpan.FromSeconds(options.Value.CoolingTime);
             var account = CloudStorageAccount.Parse(options.Value.QueueConnectionString);
             _client = account.CreateCloudQueueClient();
+            _client.DefaultRequestOptions.MaximumExecutionTime = TimeSpan.FromSeconds(30);
+            _client.DefaultRequestOptions.ServerTimeout = TimeSpan.FromSeconds(10);
             _queue = _client.GetQueueReference(options.Value.QueueName);
         }
 
