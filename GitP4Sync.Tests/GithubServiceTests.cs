@@ -1,4 +1,6 @@
 ﻿using System;
+using System.Collections.Generic;
+using GitP4Sync.Models;
 using GitP4Sync.Services;
 using MHanafy.GithubClient;
 using MHanafy.GithubClient.Models;
@@ -32,6 +34,40 @@ namespace GitP4Sync.Tests
             //Assert
             client.Received().UpdateCheckRun(token, repo, statusId, Arg.Any<string>(),
                 CheckRun.RunConclusion.ActionRequired, Arg.Is<CheckRunOutput>(x => x.Summary.StartsWith(message)));
+        }
+
+        [TestMethod]
+        public void GetPullStatus_SubmitRetry_ReturnsCorrectStatus()
+        {
+            //Arrange
+            var repo = "repo";
+            var token = new InstallationToken(0,"",repo,DateTime.Now.AddHours(1));
+            var status = Substitute.For<IPullStatus>();
+            var client = Substitute.For<IGithubClient>();
+            CheckRunOutput output = null;
+            client.UpdateCheckRun(token, repo, status.Id, CheckRun.RunStatus.Completed, Arg.Any<string>(), Arg.Do<CheckRunOutput>(x=> output = x), Arg.Any<DateTime?>(), null);
+            var settings = Substitute.For<IOptions<GithubSettings>>();
+            settings.Value.Returns(Substitute.For<GithubSettings>());
+            var service = new GithubService(client, settings);
+            service.UpdatePullStatus(token, repo, status, new Exception(), false, 0, 2).Wait();
+            var suite = Substitute.For<CheckSuite>();
+            suite.LatestCheckRunsCount = 1;
+            suite.Id = 4;
+
+            var run = new CheckRun("","","");
+            run.App = new App();
+            run.Output = Substitute.For<Output>();
+            run.Output.Title = output.Title;
+            run.Output.Summary = output.Summary;
+            client.GetCheckSuites(token, repo, Arg.Any<string>()).Returns(new List<CheckSuite>{ suite} );
+            client.GetCheckRuns(token, repo, suite.Id).Returns(new List<CheckRun>{run });
+
+            //Act
+            var result = service.GetPullStatus(token, repo, Substitute.For<IPullRequest>(), new List<string>()).Result;
+
+            //Assert
+            Assert.AreEqual(SubmitStatus.SubmitRetry, result.Status);
+            Assert.AreEqual(0, result.Retries);
         }
     }
 }

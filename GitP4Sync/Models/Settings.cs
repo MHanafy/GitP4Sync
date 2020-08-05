@@ -14,6 +14,7 @@ namespace GitP4Sync.Models
         public int P4MaxChanges { get; set; } = 10;
         public int P4DeleteShelveDays { get; set; } = 10;
         public long GithubInstallationId { get; set; }
+        public List<string> GithubChecks { get; set; }
         public HashSet<string> Branches { get; set; }
         public bool AutoSubmitEnabled { get; set; }
         public bool AutoSubmitDefault { get; set; } = true;

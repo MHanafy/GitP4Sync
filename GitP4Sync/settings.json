@@ -8,6 +8,7 @@
 	"P4DeleteShelveDays": "10",
 	"Scripts": "Git.ps1,P4.ps1",
 	"GithubInstallationId": "0",
+	"GithubChecks": [ "AzurePipelines" ],
 	"Branches": [ "master" ],
 	"AutoSubmitEnabled": "false",
 	"AutoSubmitDefault": "true",
