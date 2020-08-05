@@ -186,12 +186,12 @@ namespace GitP4Sync.Services
                     break;
                 case SubmitStatus.PendingChecks:
                     var pendingChecks = string.Join(", ", pullStatus.Checks.Where(x => x.Value == null).Select(x=>x.Key));
-                    output = new CheckRunOutput{Title = Messages.PendingChecks, Summary = $"{Messages.PendingChecksSummary}Pending checks: {pendingChecks}"};
+                    output = new CheckRunOutput{Title = Messages.PendingChecks, Summary = $"{Messages.PendingChecksSummary}Pending check(s): {pendingChecks}"};
                     actionRequired = true;
                     break;
                 case SubmitStatus.FailedChecks:
                     var failedChecks = string.Join(", ", pullStatus.Checks.Where(x => ! x.Value.GetValueOrDefault()).Select(x => x.Key));
-                    output = new CheckRunOutput { Title = Messages.FailedChecks, Summary = $"{Messages.FailedChecksSummary}Pending checks: {failedChecks}" };
+                    output = new CheckRunOutput { Title = Messages.FailedChecks, Summary = $"{Messages.FailedChecksSummary}Failed check(s): {failedChecks}" };
                     actionRequired = true;
                     break;
                 case SubmitStatus.InProgress:
@@ -294,6 +294,12 @@ namespace GitP4Sync.Services
                     break;
                 case Messages.UnmappedUsers:
                     status = SubmitStatus.UnmappedUsers;
+                    break;
+                case Messages.PendingChecks:
+                    status = SubmitStatus.PendingChecks;
+                    break;
+                case Messages.FailedChecks:
+                    status = SubmitStatus.FailedChecks;
                     break;
                 default:
                     Logger.Info($"Unidentified submit status '{run.Output.Title}', assuming InProgress");

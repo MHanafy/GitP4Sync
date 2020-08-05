@@ -30,7 +30,7 @@ namespace GitP4Sync.Services
             public const string ReviewRequiredSummary = "An approved code review is required before changes can be submitted to Perforce";
             public const string UnmappedUsers = "Unmapped users - mapping required";
             public const string FailedChecks = "Required check(s) failed";
-            public const string FailedChecksSummary = "One or more Required check failed, fix them first to proceed.\r\n";
+            public const string FailedChecksSummary = "One or more Required check(s) failed, fix them first to proceed.\r\n";
             public const string PendingChecks = "Waiting for required check(s)";
             public const string PendingChecksSummary = "Some required checks are still running, waiting for them to succeed...\r\n";
         }
