@@ -117,7 +117,7 @@ namespace GitP4Sync.Services
                 return false;
             }
 
-            var status = await _githubService.GetPullStatus(token, repo, pull);
+            var status = await _githubService.GetPullStatus(token, repo, pull, _settings.GithubChecks);
             if (status.Status != SubmitStatus.SubmitReady && status.Status != SubmitStatus.Error)
             {
                 Logger.Warn($"Unexpected submit request for pull {pull.Number} - status: {status.Status}");
@@ -191,7 +191,7 @@ namespace GitP4Sync.Services
         public async Task<bool> ProcessPullRequest(InstallationToken token, string repo, IPullRequest pull)
         {
             Logger.Info($"Started processing pull {pull.Number} by {pull.UserLogin}");
-            var status = await _githubService.GetPullStatus(token, repo, pull);
+            var status = await _githubService.GetPullStatus(token, repo, pull, _settings.GithubChecks);
             if (!ActionRequired(status)) return false;
             try
             {

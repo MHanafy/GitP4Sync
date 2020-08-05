@@ -26,8 +26,9 @@ namespace GitP4Sync.Services
         /// </summary>
         /// <param name="token"></param>
         /// <param name="repo"></param>
-        /// <param name="sha"></param>
+        /// <param name="pull"></param>
+        /// <param name="checkNames">A list of check names to check and return status for</param>
         /// <returns></returns>
-        Task<IPullStatus> GetPullStatus(InstallationToken token, string repo, IPullRequest pull);
+        Task<IPullStatus> GetPullStatus(InstallationToken token, string repo, IPullRequest pull, IList<string> checkNames);
     }
 }
