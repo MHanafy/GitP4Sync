@@ -33,7 +33,7 @@ namespace GitP4Sync.Tests
             
             //Assert
             client.Received().UpdateCheckRun(token, repo, statusId, Arg.Any<string>(),
-                CheckRun.RunConclusion.ActionRequired, Arg.Is<CheckRunOutput>(x => x.Summary.StartsWith(message)));
+                CheckRun.RunConclusion.ActionRequired, Arg.Is<CheckRunOutput>(x => x.Summary.StartsWith(message)), Arg.Any<DateTime?>());
         }
 
         [TestMethod]
@@ -53,6 +53,7 @@ namespace GitP4Sync.Tests
             var suite = Substitute.For<CheckSuite>();
             suite.LatestCheckRunsCount = 1;
             suite.Id = 4;
+            suite.App = Substitute.For<App>();
 
             var run = new CheckRun("","","");
             run.App = new App();

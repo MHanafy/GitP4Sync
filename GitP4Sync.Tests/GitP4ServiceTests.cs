@@ -56,7 +56,7 @@ namespace GitP4Sync.Tests
             status.Status.Returns(SubmitStatus.SubmitReady);
             var pull = Substitute.For<IPullRequest>();
             pull.Open.Returns(true);
-            _githubService.GetPullStatus(_token, Repo, pull).Returns(status);
+            _githubService.GetPullStatus(_token, Repo, pull, Arg.Any<IList<string>>()).Returns(status);
             _githubService.GetPullRequest(_token, Repo, Arg.Any<long>()).Returns(pull);
             _githubService.ValidatePull(_token, Repo, pull, status).Returns((true,null));
             var ex = new InvalidOperationException(Guid.NewGuid().ToString());
@@ -87,7 +87,7 @@ namespace GitP4Sync.Tests
             status.Status.Returns(initialRetry == null ? SubmitStatus.SubmitReady : SubmitStatus.SubmitRetry);
             var pull = Substitute.For<IPullRequest>();
             pull.Open.Returns(true);
-            _githubService.GetPullStatus(_token, Repo, pull).Returns(status);
+            _githubService.GetPullStatus(_token, Repo, pull, Arg.Any<IList<string>>()).Returns(status);
             _githubService.GetPullRequest(_token, Repo, Arg.Any<long>()).Returns(pull);
             _githubService.ValidatePull(_token, Repo, pull, status).Returns((true,null));
             var ex = new InvalidOperationException(Guid.NewGuid().ToString());
