@@ -163,10 +163,15 @@ namespace GitP4Sync.Services
 
         private bool ActionRequired(IPullStatus status)
         {
-            var result = status.Status == SubmitStatus.InProgress || status.Status == SubmitStatus.MergeConflict ||
-                   status.Status == SubmitStatus.ReviewRequired || status.Status == SubmitStatus.UnmappedUsers ||
-                   status.Status == SubmitStatus.SubmitRetry ||
-                   status.Status == SubmitStatus.Error && status.Retries.GetValueOrDefault(0) < _settings.Retries;
+            var result = 
+                status.Status == SubmitStatus.InProgress ||
+                status.Status == SubmitStatus.MergeConflict ||
+                status.Status == SubmitStatus.ReviewRequired ||
+                status.Status == SubmitStatus.UnmappedUsers ||
+                status.Status == SubmitStatus.SubmitRetry ||
+                status.Status == SubmitStatus.PendingChecks ||
+                status.Status == SubmitStatus.FailedChecks ||
+                status.Status == SubmitStatus.Error && status.Retries.GetValueOrDefault(0) < _settings.Retries;
             if(!result) Logger.Info($"No action required - state: {status.Status}");
             return result;
         }
