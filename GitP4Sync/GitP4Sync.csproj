@@ -23,7 +23,7 @@
     <PackageReference Include="MHanafy.Scheduling" Version="1.0.0" />
     <PackageReference Include="Microsoft.Azure.Storage.Queue" Version="11.2.0" />
     <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="3.1.3" />
-    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="3.1.3" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="3.1.7" />
     <PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" Version="3.1.3" />
     <PackageReference Include="Microsoft.PowerShell.SDK" Version="7.0.3" />
     <PackageReference Include="Microsoft.WSMan.Management" Version="7.0.3" />
