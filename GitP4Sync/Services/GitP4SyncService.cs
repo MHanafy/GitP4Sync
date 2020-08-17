@@ -125,9 +125,9 @@ namespace GitP4Sync.Services
 
             try
             {
-                var (valid, reviewerLogin) = await _githubService.ValidatePull(token, repo, pull, status);
+                var (valid, reviewerLogins) = await _githubService.ValidatePull(token, repo, pull, status);
                 if (!valid) return false;
-                var (owner, reviewer) = await GetUsers(token, repo, pull, status, reviewerLogin);
+                var (owner, reviewer) = await GetUsers(token, repo, pull, status, reviewerLogins);
                 if (owner == null || reviewer == null)
                 {
                     //Ignore the request if review was revoked
@@ -260,11 +260,17 @@ namespace GitP4Sync.Services
             }
         }
 
-        private async Task<(User Owner, User Reviewer)> GetUsers(InstallationToken token, string repo, IPullRequest pull, IPullStatus status, string reviewerLogin)
+        private async Task<(User Owner, User Reviewer)> GetUsers(InstallationToken token, string repo, IPullRequest pull, IPullStatus status, List<string> reviewerLogins)
         {
             var user = await GetUser(token, pull.UserLogin);
-            var reviewer = reviewerLogin == null ? null : await GetUser(token, reviewerLogin);
-            if (reviewerLogin == null)
+            User reviewer = null;
+            foreach (var reviewerLogin in reviewerLogins)
+            {
+                reviewer = await GetUser(token, reviewerLogin);
+                if(reviewer!=null) break;
+            }
+
+            if (reviewerLogins.Count == 0)
             {
                 if (user != null && !user.RequireCodeReview)
                 {
@@ -276,11 +282,13 @@ namespace GitP4Sync.Services
                     Logger.Info("Code review required");
                 }
             }
-            if (user != null && (reviewerLogin == null || reviewer != null)) return (user, reviewer);
+
+            //return if there's no need to show unmapped users message
+            if (user != null && (reviewerLogins.Count == 0 || reviewer != null)) return (user, reviewer);
 
             var unmappedUsers = new List<string>();
             if(user == null) unmappedUsers.Add(pull.UserLogin);
-            if(reviewerLogin != null && reviewer == null) unmappedUsers.Add(reviewerLogin);
+            if(reviewerLogins.Count > 0 && reviewer == null) unmappedUsers.AddRange(reviewerLogins);
             await _githubService.UpdatePullStatus(token, repo, status.Id, unmappedUsers.ToArray());
             
             return (user, reviewer);

@@ -27,6 +27,7 @@ This becomes possible because, instead of trying to make a 2-way sync and worryi
     - [G. Service Configuration](#g-service-configuration)
     - [I. Logging configuration](#i-logging-configuration)
     - [J. Starting the service](#j-starting-the-service)
+  - [Building the project](#building-the-project)
   - [Getting help](#getting-help)
 
 ## How it works
@@ -138,5 +139,16 @@ Modify `NLog.config` as suitable following [the NLog Guide](https://GitHub.com/n
 After all the hard work, time for the moment of truth :), to start the service, either execute `GitP4Sync Start` or head to windows services and start it from there.
 I recommend opening `logs\log.txt` in any tail capable application like `NotePad++` to get familiar with the logs and ensure things are running well.
 
+## Building the project
+To get the prebuilt package, just head to the packages section and download the latest stable.
+If you want to build it yourself, ensure to have .Net Core 3.1 and execute below command from the `GitP4Sync` project directory
+```
+dotnet publish -c Release
+```
+
+To build a self contained pacakge that doesn't require .Net Core runtime
+```
+dotnet publish -c Release -r win-x64
+```
 ## Getting help
 If you've any questions, look up the issues section, and if your question isn't answered create a new issue.

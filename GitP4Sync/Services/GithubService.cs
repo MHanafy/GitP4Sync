@@ -42,7 +42,7 @@ namespace GitP4Sync.Services
             return (await _client.GetPullRequests(token, repo)).Select(PullRequest.CreateFrom);
         }
 
-        public async Task<(bool Valid, string ReviewerLogin)> ValidatePull(InstallationToken token, string repo, IPullRequest pull, IPullStatus pullStatus)
+        public async Task<(bool Valid, List<string> ReviewerLogins)> ValidatePull(InstallationToken token, string repo, IPullRequest pull, IPullStatus pullStatus)
         {
             if (pull.Mergeable == null)
             {
@@ -80,11 +80,12 @@ namespace GitP4Sync.Services
                 return (false, null);
             }
 
-            var review =
-                (await _client.GetReviews(token, repo, pull.Number)).FirstOrDefault(x =>
-                    x.State == Review.ReviewState.Approved);
+            var reviewers = (await _client.GetReviews(token, repo, pull.Number))
+                .Where(x => x.State == Review.ReviewState.Approved)
+                .Select(x=>x.User.Login)
+                .ToList();
 
-            return (true, review?.User.Login);
+            return (true, reviewers);
         }
 
         public async Task UpdatePullStatus(InstallationToken token, string repo, long statusId,string[] unmappedUsers)
