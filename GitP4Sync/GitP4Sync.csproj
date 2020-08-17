@@ -11,7 +11,7 @@
     <PackageReleaseNotes />
     <PackageTags>Github Git Perforce P4 Migration SourceControl Sync Repository</PackageTags>
     <Description>A 2-way integration framework between a Github repository and an On-premises Perforce repository.</Description>
-    <Version>1.2.0</Version>
+    <Version>1.2.1</Version>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">

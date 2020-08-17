@@ -12,7 +12,7 @@ namespace GitP4Sync.Services
         Task<InstallationToken> GetToken(long installationId);
         Task<IPullRequest> GetPullRequest(InstallationToken token, string repo, long number);
         Task<IEnumerable<IPullRequest>> GetPullRequests(InstallationToken token, string repo);
-        Task<(bool Valid, string ReviewerLogin)> ValidatePull(InstallationToken token, string repo, IPullRequest pull, IPullStatus pullStatus);
+        Task<(bool Valid, List<string> ReviewerLogins)> ValidatePull(InstallationToken token, string repo, IPullRequest pull, IPullStatus pullStatus);
         Task UpdatePullStatus(InstallationToken token, string repo, long statusId,string[] unmappedUsers);
         Task UpdatePullStatus(InstallationToken token, string repo, long statusId, Exception ex);
         Task UpdatePullStatus(InstallationToken token, string repo, IPullStatus status, Exception ex, bool showSubmit, int? retries, int maxRetries);
