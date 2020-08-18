@@ -66,7 +66,7 @@ namespace GitP4Sync.Services
             }
 
             //Update the check status if any check isn't completed or has failed
-            var failedChecks = pullStatus.Checks.Any(x => !x.Value.GetValueOrDefault());
+            var failedChecks = pullStatus.Checks.Any(x => x.Value == false);
             if (failedChecks)
             {
                 await UpdatePullStatus(token, repo, pullStatus, SubmitStatus.FailedChecks);
@@ -191,7 +191,7 @@ namespace GitP4Sync.Services
                     actionRequired = true;
                     break;
                 case SubmitStatus.FailedChecks:
-                    var failedChecks = string.Join(", ", pullStatus.Checks.Where(x => ! x.Value.GetValueOrDefault()).Select(x => x.Key));
+                    var failedChecks = string.Join(", ", pullStatus.Checks.Where(x => x.Value == false).Select(x => x.Key));
                     output = new CheckRunOutput { Title = Messages.FailedChecks, Summary = $"{Messages.FailedChecksSummary}Failed check(s): {failedChecks}" };
                     actionRequired = true;
                     break;
