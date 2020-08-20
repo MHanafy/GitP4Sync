@@ -19,7 +19,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="mhanafy.githubclient" Version="1.0.2" />
+    <PackageReference Include="mhanafy.githubclient" Version="1.0.3" />
     <PackageReference Include="MHanafy.Scheduling" Version="1.0.0" />
     <PackageReference Include="Microsoft.Azure.Storage.Queue" Version="11.2.0" />
     <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="3.1.3" />

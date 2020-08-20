@@ -80,7 +80,8 @@ namespace GitP4Sync.Services
                 return (false, null);
             }
 
-            var reviewers = (await _client.GetReviews(token, repo, pull.Number))
+            var reviews = (await _client.GetReviews(token, repo, pull.Number));
+            var reviewers = reviews
                 .Where(x => x.State == Review.ReviewState.Approved)
                 .Select(x=>x.User.Login)
                 .ToList();
