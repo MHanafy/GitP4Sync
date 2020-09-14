@@ -1,45 +1,44 @@
 ﻿function P4Checkout($changes, $depotPath, $desc){
+    
     $output = "Change: new`r`nDescription:$desc" | p4 change -i
     if($LastExitCode -ne 0 -or -not ($output -match 'Change\s(\d+)\screated')) {throw "P4: failed to create a new change list`r`n$output"}
+    
     $changelist = $Matches[1]
     Write-Host "P4: Change list $changelist created"
+    
     try{
-        $changes | ForEach-Object{
-            $fileName = $_.FileName
-            $depotFileName = "$depotPath$fileName"
-            $localFileName = P4GetLocalFileName($depotFileName)
-            switch($_.State){
-                'A'{ 
-                        #try fetching the file in case a file with the same name was added by another P4 user
-                        $log = p4 sync -f "$localFileName" 2>&1
-                        if($LastExitCode -ne 0) {throw "P4: failed to sync '$fileName'`r`n$log"}
-                        if(-not ($log -match "no such file\(s\)") -and -not($log -match "deleted as")) {throw "P4: Same file name was added by another user '$localFileName'`r`n$log"}
-                        CopyFile $fileName $localFileName
-                        $log = P4 add -c $changelist "$localFileName" 2>&1
-                        if($LastExitCode -ne 0) {throw "P4: failed to add '$fileName'`r`n$log"}
-                        if($log){ Write-Host $log}
-                    } 
-                'D'{ 
-                        $log = p4 sync -f "$localFileName" 
-                        if($LastExitCode -ne 0) {throw "P4: failed to sync '$fileName'`r`n$log"}
-                        $log = P4 delete -c $changelist "$localFileName" 2>&1
-                        if($LastExitCode -ne 0) {throw "P4: failed to delete '$fileName'`r`n$log"}
-                        if($log){ Write-Host $log}
-                    }
-                'M'{ 
-                        $log = p4 sync -f "$localFileName"
-                        if($LastExitCode -ne 0) {throw "P4: failed to sync '$fileName'`r`n$log"}
-                        $log = p4 edit -c $changelist $localFileName 2>&1
-                        if($LastExitCode -ne 0 -or -not ($log -match "opened for edit")) 
-                        {
-                            throw "P4: failed to checkout file '$fileName'`r`n$output"
-                        }
-                        if($log){ Write-Host $log}
-                        CopyFile $fileName $localFileName
-                    }
-                Default  {throw "Git: Invalid file state $_.State"}
-		    }
-	    }
+        $log = $changes | ForEach-Object{$_ | add-member -NotePropertyName LocalFileName -NotePropertyValue $(P4GetLocalFileName("$depotPath$($_.FileName)")) -force}
+        Write-Host "P4: Populated local perforce files"
+        
+        $log = $changes | Where-Object State -ne 'A' | ForEach-Object{$_.LocalFileName} | p4 -x - sync -f 2>&1
+        if($LastExitCode -ne 0) {throw "P4: failed to sync '$($file.FileName)'`r`n$log"}
+
+        #try fetching added files in case a file with the same name was added by another P4 user
+        $added = $changes | Where-Object State -eq 'A'
+        $log = $added | ForEach-Object{$_.LocalFileName} | p4 -x - sync -f 2>&1
+        if($LastExitCode -ne 0 -or [regex]::Matches($log, "(deleted as|no such file)").Count -ne $added.Count) {throw "P4: failed to sync '$($file.FileName)'`r`n$log"}
+        Write-Host "P4: Refreshed all files"
+
+        #process all added files
+        $added | ForEach-Object {CopyFile $_.FileName $_.LocalFileName}
+        $log = $added | ForEach-Object{$_.LocalFileName} | p4 -x - add -c $changelist 2>&1
+        if($LastExitCode -ne 0) {throw "P4: failed to add files.`r`n$log"}
+        if($log){ Write-Host $log}
+        Write-Host "P4: Checked out added files"
+
+        #process all deleted files
+        $log = $changes | Where-Object State -eq 'D' | ForEach-Object{$_.LocalFileName} | p4 -x - delete -c $changelist 2>&1
+        if($LastExitCode -ne 0) {throw "P4: failed to delete files.`r`n$log"}
+        if($log){ Write-Host $log}
+        Write-Host "P4: Checked out deleted files"
+
+        #process all modified files
+        $modified = $changes | Where-Object State -eq 'M'
+        $log = $modified | ForEach-Object{$_.LocalFileName} | p4 -x - edit -c $changelist 2>&1
+        if($LastExitCode -ne 0 -or [regex]::Matches($log, "opened for edit").Count -ne $modified.Count) {throw "P4: failed to checkout files.`r`n$log"}
+        if($log){ Write-Host $log}
+        $modified | ForEach-Object {CopyFile $_.FileName $_.LocalFileName}
+        Write-Host "P4: Checked out modified files"
 	}
     catch{
         Write-Host "P4: Failed to checkout, reverting ..."
@@ -83,13 +82,13 @@ function P4Submit($type, $id, $branch, $svcUser, $user, $desc, $shelve = 'y', $d
     $log = p4 changes -m 1 -s submitted "$depot..."
     if($LastExitCode -ne 0) {throw "P4: failed to get submitted changes"}
     $latestChange = ([regex]::Matches($log, 'Change (\d+) on \d{4}\/\d{2}\/\d{2} by'))[0].Groups[1].Value
-    if($latestChange = $lastChange){
+    if($latestChange -eq $lastChange){
         if($shelve -eq 'y'){
             $log = p4 shelve -c $changelist 2>&1
             if($LastExitCode -ne 0) {throw "P4: failed to shelve changelist '$changelist'`r`n$log"}
             Write-Host "Shelved changelist '$changelist'"
 		} 
-        else
+            else
         {
             $log = p4 submit -c $changelist 2>&1
             if($LastExitCode -ne 0) {throw "P4: failed to submit changelist '$changelist'`r`n$log"}
@@ -138,10 +137,10 @@ function P4ClearAll($svcUser, $deleteShelveDays){
     Write-Host "P4: Started Deleting all change lists in workspace $workspace"
     $data = p4 changes -c $workspace -s pending
     if($data){
-        $matches = [regex]::Matches($data, 'Change\s(\d+)\son\s(\d{4}\/\d{2}\/\d{2}) by (.*?)@')
+        $changeLists = [regex]::Matches($data, 'Change\s(\d+)\son\s(\d{4}\/\d{2}\/\d{2}) by (.*?)@')
 	}
-    if($matches){
-        $changes = $matches | %{[PSCustomObject]@{User=$_.Groups[3].value; Number=$_.Groups[1].value; Date=[DateTime]::ParseExact($_.Groups[2].value,'yyyy/MM/dd',[CultureInfo].InvarianCulture)}}
+    if($changeLists){
+        $changes = $changeLists | ForEach-Object{[PSCustomObject]@{User=$_.Groups[3].value; Number=$_.Groups[1].value; Date=[DateTime]::ParseExact($_.Groups[2].value,'yyyy/MM/dd',[CultureInfo].InvarianCulture)}}
 	}
     if($changes.Count -eq 0){
         Write-Host "P4: No change lists found"
