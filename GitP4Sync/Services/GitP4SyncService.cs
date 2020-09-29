@@ -155,7 +155,7 @@ namespace GitP4Sync.Services
         {
             //First try would have null retries, when updating it should be 0, hence using -1
             var updatedRetries = (status.Retries ?? -1) + 1;
-            var showSubmit = _actionsRepo.Enabled && updatedRetries == _settings.Retries;
+            var showSubmit = _actionsRepo.Enabled && updatedRetries >= _settings.Retries;
             await _githubService.UpdatePullStatus(token, repo, status, e, showSubmit, updatedRetries, _settings.Retries);
             Logger.Error(e);
 
@@ -233,7 +233,6 @@ namespace GitP4Sync.Services
         private async Task SubmitToPerforce(InstallationToken token, string repo, IPullRequest pull, IPullStatus status,
             User owner, User reviewer, int? retries)
         {
-            if (retries >= _settings.Retries) return;
             try
             {
                 var pullTitle = $"{pull.Title} | Reviewed by {reviewer.P4Login}";
