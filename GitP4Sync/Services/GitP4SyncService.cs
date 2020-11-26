@@ -30,6 +30,7 @@ namespace GitP4Sync.Services
             _userRepo = userRepo;
             _actionsRepo = repo;
             _githubService = githubService;
+            _githubService.ForceSubmitEnabled = settings.Value.ForceSubmitEnabled;
         }
 
         public async Task Start()
@@ -118,14 +119,17 @@ namespace GitP4Sync.Services
             }
 
             var status = await _githubService.GetPullStatus(token, repo, pull, _settings.GithubChecks);
-            if (status.Status != SubmitStatus.SubmitReady && status.Status != SubmitStatus.Error)
+            if (status.Status != SubmitStatus.PendingChecks &&
+                status.Status != SubmitStatus.FailedChecks &&
+                status.Status != SubmitStatus.SubmitReady &&
+                status.Status != SubmitStatus.Error)
             {
                 Logger.Warn($"Unexpected submit request for pull {pull.Number} - status: {status.Status}");
             }
 
             try
             {
-                var (valid, reviewerLogins) = await _githubService.ValidatePull(token, repo, pull, status);
+                var (valid, reviewerLogins) = await _githubService.ValidatePull(token, repo, pull, status, action.ForceSubmit);
                 if (!valid) return false;
                 var (owner, reviewer) = await GetUsers(token, repo, pull, status, reviewerLogins);
                 if (owner == null || reviewer == null)
@@ -135,8 +139,7 @@ namespace GitP4Sync.Services
                     return false;
                 }
 
-                //When processing a user submit request, always reset the retries counter to start over
-                await SubmitToPerforce(token, repo, pull, status, owner, reviewer, null);
+                await SubmitToPerforce(token, repo, pull, status, owner, reviewer);
                 return true;
             }
             catch (Exception e)
@@ -210,7 +213,7 @@ namespace GitP4Sync.Services
                     if (status.Retries != null)
                     {
                         //retrying, submit instead of showing the submit button
-                        await SubmitToPerforce(token, repo, pull, status, owner, reviewer, status.Retries);
+                        await SubmitToPerforce(token, repo, pull, status, owner, reviewer);
                         return true;
                     }
 
@@ -219,7 +222,7 @@ namespace GitP4Sync.Services
                     return false;
                 }
 
-                await SubmitToPerforce(token, repo, pull, status, owner, reviewer, status.Retries);
+                await SubmitToPerforce(token, repo, pull, status, owner, reviewer);
                 return true;
             }
             catch (Exception e)
@@ -231,7 +234,7 @@ namespace GitP4Sync.Services
         }
 
         private async Task SubmitToPerforce(InstallationToken token, string repo, IPullRequest pull, IPullStatus status,
-            User owner, User reviewer, int? retries)
+            User owner, User reviewer)
         {
             try
             {

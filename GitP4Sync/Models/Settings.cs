@@ -18,8 +18,9 @@ namespace GitP4Sync.Models
         public HashSet<string> Branches { get; set; }
         public bool AutoSubmitEnabled { get; set; }
         public bool AutoSubmitDefault { get; set; } = true;
+        public bool ForceSubmitEnabled { get; set; } = false;
 
         public override string ToString() =>
-            $"{nameof(P4MaxChanges)}={P4MaxChanges} {nameof(P4DeleteShelveDays)}: '{P4DeleteShelveDays}' {nameof(AutoSubmitEnabled)}:'{AutoSubmitEnabled}' {nameof(AutoSubmitDefault)}:'{AutoSubmitDefault}' {nameof(Branches)}: '{string.Join(',', Branches)}'";
+            $"{nameof(ForceSubmitEnabled)}={ForceSubmitEnabled} {nameof(P4MaxChanges)}={P4MaxChanges} {nameof(P4DeleteShelveDays)}: '{P4DeleteShelveDays}' {nameof(AutoSubmitEnabled)}:'{AutoSubmitEnabled}' {nameof(AutoSubmitDefault)}:'{AutoSubmitDefault}' {nameof(Branches)}: '{string.Join(',', Branches)}'";
     }
 }

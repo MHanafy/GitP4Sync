@@ -7,12 +7,14 @@ using MHanafy.GithubClient.Models.Github;
 
 namespace GitP4Sync.Services
 {
+    public enum PullAction { Submit, ForceSubmit}
+
     public interface IGithubService
     {
         Task<InstallationToken> GetToken(long installationId);
         Task<IPullRequest> GetPullRequest(InstallationToken token, string repo, long number);
         Task<IEnumerable<IPullRequest>> GetPullRequests(InstallationToken token, string repo);
-        Task<(bool Valid, List<string> ReviewerLogins)> ValidatePull(InstallationToken token, string repo, IPullRequest pull, IPullStatus pullStatus);
+        Task<(bool Valid, List<string> ReviewerLogins)> ValidatePull(InstallationToken token, string repo, IPullRequest pull, IPullStatus pullStatus, bool forceSubmit = false);
         Task UpdatePullStatus(InstallationToken token, string repo, long statusId,string[] unmappedUsers);
         Task UpdatePullStatus(InstallationToken token, string repo, long statusId, Exception ex);
         Task UpdatePullStatus(InstallationToken token, string repo, IPullStatus status, Exception ex, bool showSubmit, int? retries, int maxRetries);
@@ -30,5 +32,8 @@ namespace GitP4Sync.Services
         /// <param name="checkNames">A list of check names to check and return status for</param>
         /// <returns></returns>
         Task<IPullStatus> GetPullStatus(InstallationToken token, string repo, IPullRequest pull, IList<string> checkNames);
+
+        Task UpdatePullAction(InstallationToken token, string repo, IPullRequest pull, PullAction action);
+        public bool ForceSubmitEnabled { get; set; }
     }
 }

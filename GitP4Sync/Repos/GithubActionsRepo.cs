@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Threading.Tasks;
 using GitP4Sync.Models;
+using GitP4Sync.Services;
 using Microsoft.Azure.Storage;
 using Microsoft.Azure.Storage.Queue;
 using Microsoft.Extensions.Options;
@@ -43,23 +44,37 @@ namespace GitP4Sync.Repos
                 var message = await _queue.GetMessageAsync(_coolingTime, _client.DefaultRequestOptions, null);
                 if (message == null) return null;
                 var action = JsonConvert.DeserializeObject<Github.GithubAction>(message.AsString);
+
+                if((action.CheckRun?.PullRequests?.Count ?? 0) == 0)
+                {
+                    Logger.Info($"No pull request - Ignoring action; action: '{action.Action}' by '{action.Sender?.Login}'");
+                    await _queue.DeleteMessageAsync(message);
+                    continue;
+                }
+                var pullNumber = action.CheckRun.PullRequests[0].Number;
+
                 if (action.Action != Github.GithubAction.ActionName.Requested)
                 {
-                    Logger.Info(
-                        $"skipping submit request; action: '{action.Action}' pull '{action.RequestedAction?.Id}' by '{action.Sender?.Login}'");
-
+                    Logger.Info($"skipping submit request; action: '{action.Action}' pull '{action.RequestedAction?.Id}' by '{action.Sender?.Login}'");
                     await _queue.DeleteMessageAsync(message);
                     continue;
                 }
 
-                if (action.CheckRun == null || !long.TryParse(action.RequestedAction.Id, out var pullNumber))
+                bool forceSubmit;
+                switch (action.RequestedAction.Id)
                 {
-                    Logger.Error(
-                        $"Invalid submit request; action: '{action.Action}' pull '{action.RequestedAction?.Id}' by '{action.Sender?.Login}'");
-                    await _queue.DeleteMessageAsync(message);
-                    continue;
+                    case GithubService.SubmitLabel.Submit:
+                        forceSubmit = false;
+                        break;
+                    case GithubService.SubmitLabel.ForceSubmit:
+                        forceSubmit = true;
+                        break;
+                    default:
+                        Logger.Info($"skipping action: '{action.Action}' pull '{action.RequestedAction?.Id}' by '{action.Sender?.Login}'");
+                        await _queue.DeleteMessageAsync(message);
+                        continue;
                 }
-                return new GithubAzureAction(message, pullNumber, action.Sender.Login);
+                return new GithubAzureAction(message, pullNumber, action.Sender.Login, forceSubmit);
             }
         }
 

@@ -21,6 +21,13 @@ namespace GitP4Sync.Services
         private readonly IGithubClient _client;
         private static readonly NLog.Logger Logger = NLog.LogManager.GetCurrentClassLogger();
 
+        public bool ForceSubmitEnabled { get; set; }
+        public static class SubmitLabel
+        {
+            public const string Submit = "Submit to Perforce";
+            public const string ForceSubmit = "Force Submit";
+        }
+
         public GithubService(IGithubClient client, IOptions<GithubSettings> settings)
         {
             _settings = settings.Value;
@@ -42,7 +49,7 @@ namespace GitP4Sync.Services
             return (await _client.GetPullRequests(token, repo)).Select(PullRequest.CreateFrom);
         }
 
-        public async Task<(bool Valid, List<string> ReviewerLogins)> ValidatePull(InstallationToken token, string repo, IPullRequest pull, IPullStatus pullStatus)
+        public async Task<(bool Valid, List<string> ReviewerLogins)> ValidatePull(InstallationToken token, string repo, IPullRequest pull, IPullStatus pullStatus, bool forceSubmit = false)
         {
             if (pull.Mergeable == null)
             {
@@ -66,18 +73,21 @@ namespace GitP4Sync.Services
             }
 
             //Update the check status if any check isn't completed or has failed
-            var failedChecks = pullStatus.Checks.Any(x => x.Value == false);
-            if (failedChecks)
+            if (!forceSubmit)
             {
-                await UpdatePullStatus(token, repo, pullStatus, SubmitStatus.FailedChecks);
-                return (false, null);
-            }
+                var failedChecks = pullStatus.Checks.Any(x => x.Value == false);
+                if (failedChecks)
+                {
+                    await UpdatePullStatus(token, repo, pullStatus, SubmitStatus.FailedChecks);
+                    return (false, null);
+                }
 
-            var pendingChecks = pullStatus.Checks.Any(x => x.Value == null);
-            if (pendingChecks)
-            {
-                await UpdatePullStatus(token, repo, pullStatus, SubmitStatus.PendingChecks);
-                return (false, null);
+                var pendingChecks = pullStatus.Checks.Any(x => x.Value == null);
+                if (pendingChecks)
+                {
+                    await UpdatePullStatus(token, repo, pullStatus, SubmitStatus.PendingChecks);
+                    return (false, null);
+                }
             }
 
             var reviews = (await _client.GetReviews(token, repo, pull.Number));
@@ -141,8 +151,18 @@ namespace GitP4Sync.Services
         {
             return new Action
             {
-                Label = "Submit to Perforce", Identifier = pullNumber.ToString(),
+                Label = SubmitLabel.Submit, Identifier = SubmitLabel.Submit,
                 Description = "Submit changes and close pull request"
+            };
+        }
+
+        private Action GetForceSubmitAction(long pullNumber)
+        {
+            return new Action
+            {
+                Label = SubmitLabel.ForceSubmit,
+                Identifier = SubmitLabel.ForceSubmit,
+                Description = "Ignore required checks and submit now"
             };
         }
 
@@ -189,11 +209,13 @@ namespace GitP4Sync.Services
                 case SubmitStatus.PendingChecks:
                     var pendingChecks = string.Join(", ", pullStatus.Checks.Where(x => x.Value == null).Select(x=>x.Key));
                     output = new CheckRunOutput{Title = Messages.PendingChecks, Summary = $"{Messages.PendingChecksSummary}Pending check(s): {pendingChecks}"};
+                    actions = GetForceSubmitActions(pullStatus.PullNumber);
                     actionRequired = true;
                     break;
                 case SubmitStatus.FailedChecks:
                     var failedChecks = string.Join(", ", pullStatus.Checks.Where(x => x.Value == false).Select(x => x.Key));
                     output = new CheckRunOutput { Title = Messages.FailedChecks, Summary = $"{Messages.FailedChecksSummary}Failed check(s): {failedChecks}" };
+                    actions = GetForceSubmitActions(pullStatus.PullNumber);
                     actionRequired = true;
                     break;
                 case SubmitStatus.InProgress:
@@ -203,6 +225,12 @@ namespace GitP4Sync.Services
                     throw new ArgumentOutOfRangeException(nameof(submitStatus), submitStatus, "unexpected submit status");
             }
             await UpdateCheckRun(token, repo, pullStatus.Id, actionRequired, output, actions);
+        }
+
+        private List<Action> GetForceSubmitActions(long pullNumber)
+        {
+            if (!ForceSubmitEnabled) return null;
+            return new List<Action> { GetForceSubmitAction(pullNumber) };
         }
 
         public async Task ClosePullRequest(InstallationToken token, string repo, long number)
@@ -311,6 +339,11 @@ namespace GitP4Sync.Services
 
             return new PullStatus(run.Id, pullNumber, status, GetRetries(run.Output?.Summary), checks);
         }
-        
+
+        public async Task UpdatePullAction(InstallationToken token, string repo, IPullRequest pull, PullAction action)
+        {
+            await UpdateCheckRun(token, repo, pullStatus.Id, true, output, actions);
+
+        }
     }
 }

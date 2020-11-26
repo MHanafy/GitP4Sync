@@ -12,6 +12,7 @@
 	"Branches": [ "master" ],
 	"AutoSubmitEnabled": "false",
 	"AutoSubmitDefault": "true",
+	"ForceSubmitEnabled" : "true",
 	"GithubActionsSettings": {
 		"Enabled": "false",
 		"QueueName": "github",
