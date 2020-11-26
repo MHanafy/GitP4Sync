@@ -252,6 +252,11 @@ namespace GitP4Sync.Services
 
                 await _githubService.ClosePullRequest(token, repo, pull.Number);
                 Logger.Info($"Closed pull request {pull.Number}");
+
+                cmd = $"GitDeleteBranch '{pull.HeadRef}'";
+                await _script.Execute(cmd, true);
+                Logger.Info($"Deleted branch '{pull.HeadRef}'");
+
             }
             catch (Exception e)
             {

@@ -38,6 +38,12 @@ function GitFetchMerge($type, $id, $branch){
     $nBranch
 }
 
+
+function GitDeleteBranch($branch){
+    $log = git push origin --delete $branch
+    if($log){ Write-Host $log}
+}
+
 function GitSetToken($token){
     $log = git remote -v
     $remote = ([regex]::Matches($log, 'https:\/\/(?>x\-access\-token:.*?@)?(github.com\/.*\/.*) \(fetch\)'))

@@ -8,6 +8,7 @@
         bool Open { get; }
         string HeadSha { get; }
         string BaseRef { get; }
+        string HeadRef { get; }
         string UserLogin { get; }
         bool? Mergeable { get; set; }
     }
@@ -20,6 +21,7 @@
         public bool Open { get;  private set;}
         public string HeadSha { get;  private set;}
         public string BaseRef { get;  private set;}
+        public string HeadRef { get; private set; }
         public string UserLogin { get;  private set;}
         public bool? Mergeable { get; set; }
 
@@ -28,7 +30,7 @@
             return new PullRequest
             {
                 BaseRef = pull.Base.Ref, HeadSha = pull.Head.Sha, Number = pull.Number, Open = pull.State == "open",
-                Title = pull.Title, Id = pull.Id, UserLogin = pull.User.Login
+                Title = pull.Title, Id = pull.Id, UserLogin = pull.User.Login, HeadRef = pull.Head.Ref
             };
         }
 
